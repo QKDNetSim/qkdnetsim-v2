@@ -5,8 +5,7 @@ As research in Quantum Key Distribution (QKD) technology grows larger and more c
 
 The aim of Quantum Key Distribution Network Simulation Module (QKDNetSim) project was not to develop the entire simulator from scratch but to develop the QKD simulation module in some of the already existing well-proven simulators. QKDNetSim is intended to facilitate additional understanding of QKD technology with respect to the existing network solutions. It seeks to serve as the natural playground for taking the further steps into this research direction (even towards practical exploitation in subsequent projects or product design).
 
-Here, we provide the QKDNetSim source code which was developed in the network simulator of version 3 (NS-3). 
-
+Here, we provide the LIMITED PUBLIC VERSION of QKDNetSim source code which was developed in the network simulator of version 3 (NS-3). 
 
 ## Deployment
 
