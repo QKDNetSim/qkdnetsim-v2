@@ -1,6 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright(c) 2025 University of Sarajevo, Faculty of Electrical Engineering, 
+ * Copyright(c) 2026 University of Sarajevo, Faculty of Electrical Engineering, 
  * Department of Telecommunications, Zmaja od Bosne bb, 71000 Sarajevo, Bosnia and Herzegovina
  * www.tk.etf.unsa.ba 
  *
@@ -9,30 +9,38 @@
  * Author:  Emir Dervisevic <emir.dervisevic@etf.unsa.ba>
  *          Miralem Mehic <miralem.mehic@etf.unsa.ba>
  */
-#include <stdio.h>
 #include <fstream>
-#include "ns3/core-module.h" 
+#include "ns3/core-module.h"
 #include "ns3/applications-module.h"
-#include "ns3/internet-module.h" 
-#include "ns3/flow-monitor-module.h" 
+#include "ns3/internet-module.h"
+#include "ns3/flow-monitor-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/point-to-point-module.h"
-#include "ns3/internet-apps-module.h"
-#include "ns3/gnuplot.h" 
+#include "ns3/gnuplot.h"
 
-#include "ns3/qkd-link-helper.h" 
+#include "ns3/qkd-link-helper.h"
 #include "ns3/qkd-app-helper.h"
-#include "ns3/qkd-app-004.h"
+#include "ns3/qkd-app-014.h"
 
-#include "ns3/network-module.h" 
+#include "ns3/network-module.h"
 #include "ns3/internet-apps-module.h"
-#include "ns3/netanim-module.h" 
+#include "ns3/netanim-module.h"
 #include "ns3/mpi-module.h"
- 
+
+#include <iostream>
+#include <random>
+#include <utility>
+#include <vector>
+
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE ("QKD_ETSI004");
- 
+NS_LOG_COMPONENT_DEFINE ("QKDNETSIM_EXAMPLE_COMBINED_INPUT");
+
+uint32_t m_tx_count = 0;
+uint32_t m_tx_bits = 0;
+uint32_t m_rx_count = 0;
+uint32_t m_rx_bits = 0;
+
 uint32_t showKeyAdded = 1;
 uint32_t showKeyServed = 1;
 std::map<std::string, Ipv4InterfaceContainer> m_interfaces;
@@ -49,13 +57,46 @@ struct LinkDetails
 
     uint32_t m_linkDistance = 0;
     uint32_t m_keyRate = 0;
-    uint32_t m_keysGenerated = 0;
-    uint32_t m_keysGeneratedBits = 0;
-    uint32_t m_keysConsumed = 0;
-    uint32_t m_keysConsumedBits = 0;
     uint32_t m_bufferCapacityBits = 0;
-    double m_avgSizeOfGeneratedKeys = 0;
-    double m_avgSizeOfConsumedKeys = 0;
+    
+    uint32_t m_keysGenerated_QKD = 0;
+    uint32_t m_keysGeneratedBits_QKD = 0;
+    double   m_avgSizeOfKeysGenerated_QKD = 0;
+
+    uint32_t m_keysGenerated_PQC = 0;
+    uint32_t m_keysGeneratedBits_PQC = 0;
+    double   m_avgSizeOfKeysGenerated_PQC = 0;
+    
+    uint32_t m_keysPrepared_QKD = 0;
+    uint32_t m_keysPreparedBits_QKD = 0;
+    double   m_avgSizeOfKeysPrepared_QKD = 0;
+    
+    uint32_t m_keysPrepared_PQC = 0;
+    uint32_t m_keysPreparedBits_PQC = 0;
+    double   m_avgSizeOfKeysPrepared_PQC = 0;
+
+    uint32_t m_keysDeliveredFromKMS_QKD = 0;
+    uint32_t m_keysDeliveredFromKMSBits_QKD = 0;
+    double   m_avgSizeOfKeysDeliveredFromKMS_QKD = 0;
+
+    uint32_t m_keysDeliveredFromKMS_PQC = 0;
+    uint32_t m_keysDeliveredFromKMSBits_PQC = 0;
+    double   m_avgSizeOfKeysDeliveredFromKMS_PQC = 0;
+
+    uint32_t m_keysConsumedByAppForEncryption = 0;
+    uint32_t m_keysConsumedByAppForEncryptionBits = 0;
+    double   m_avgSizeOfKeysConsumedByAppForEncryption = 0;
+
+    uint32_t m_keysConsumedByAppForAuthentication = 0;
+    uint32_t m_keysConsumedByAppForAuthenticationBits = 0;
+    double   m_avgSizeOfKeysConsumedByAppForAuthentication = 0;
+
+    uint32_t m_keysWasted = 0;
+    uint32_t m_keysWastedBits = 0;
+
+    uint32_t m_keysRelayed = 0;
+    uint32_t m_keysRelayedBits = 0;
+    
 
     uint32_t m_appPacketsSent = 0;
     uint32_t m_appPacketsReceived = 0;
@@ -84,12 +125,6 @@ struct LinkDetails
     uint32_t m_bytes_sent_to_kms = 0;  
     uint32_t m_bytes_received_from_kms = 0; 
     
-    uint32_t m_keysWasted = 0;
-    uint32_t m_keysWastedBits = 0;
-
-    uint32_t m_keysRelayed = 0;
-    uint32_t m_keysRelayedBits = 0;
-    
     uint32_t srcNodeId = 0;
     uint32_t dstNodeId = 0;  
 
@@ -97,46 +132,108 @@ struct LinkDetails
     uint32_t dstKMSNodeId = 0;   
 
     uint32_t m_printed = 0;
+ 
+    std::map<std::string, uint32_t> m_keyIDPreparedInBuffers_QKD;
+    std::map<std::string, uint32_t> m_keyIDPreparedInBuffers_PQC;
+    std::map<std::string, uint32_t> m_keyIDDeliveredFromKMS_QKD;
+    std::map<std::string, uint32_t> m_keyIDDeliveredFromKMS_PQC;
+    std::map<std::string, uint32_t> m_keyIDGeneratedInBuffers_QKD;
+    std::map<std::string, uint32_t> m_keyIDGeneratedInBuffers_PQC;
+    std::map<std::string, uint32_t> m_keyIDRelayedInBuffers;
+    std::map<std::string, uint32_t> m_keyIDWasted;
+    std::map<std::string, uint32_t> m_keyConsumedByAppForEncryption;
+    std::map<std::string, uint32_t> m_keyConsumedByAppForAuthentication;
 
-    std::map<std::string, uint32_t> m_keyIDGeneratedInBuffers;
-    std::map<std::string, uint32_t> m_keyIDConsumedInBuffers;
-    std::map<std::string, uint32_t> m_keyIDConsumedByKMS;
+    Ptr<QKDApp004> etsi004srcApp = nullptr;
+    Ptr<QKDApp004> etsi004dstApp = nullptr;
+
+    Ptr<QKDApp014> etsi014srcApp = nullptr;
+    Ptr<QKDApp014> etsi014dstApp = nullptr;
+    std::string m_etsi014Ksid;
+
 };
 
 std::map<std::string, LinkDetails*> m_nodePairs;
 
 void 
-write_csv(std::string filename, std::vector<std::pair<std::string, std::vector<uint32_t>>> dataset)
+write_csv(std::string filename,
+          std::vector<std::pair<std::string, std::vector<uint32_t>>> dataset)
 {
-    // Make a CSV file with one or more columns of integer values
-    // Each column of data is represented by the pair <column name, column data>
-    //   as std::pair<std::string, std::vector<int>>
-    // The dataset is represented as a vector of these columns
-    // Note that all columns should be the same size
-    
-    // Create an output filestream object
     std::ofstream myFile(filename);
-    
-    // Send column names to the stream
-    for(uint32_t j = 0; j < dataset.size(); ++j)
+
+    // =========================
+    // SAFETY: empty dataset
+    // =========================
+    if (dataset.empty())
     {
-        myFile << dataset.at(j).first;
-        if(j != dataset.size() - 1) myFile << ","; // No comma at end of line
+        NS_LOG_WARN("write_csv: dataset is empty -> writing empty file");
+        myFile.close();
+        return;
+    }
+
+    // =========================
+    // SAFETY: ensure at least one column has data
+    // =========================
+    size_t rowCount = 0;
+    bool hasData = false;
+
+    for (const auto &col : dataset)
+    {
+        if (!col.second.empty())
+        {
+            rowCount = col.second.size();
+            hasData = true;
+            break;
+        }
+    }
+
+    if (!hasData)
+    {
+        NS_LOG_WARN("write_csv: all columns empty -> writing only headers");
+    }
+
+    // =========================
+    // OPTIONAL SAFETY: verify equal column sizes
+    // =========================
+    for (const auto &col : dataset)
+    {
+        if (!col.second.empty() && col.second.size() != rowCount)
+        {
+            NS_LOG_ERROR("write_csv: column size mismatch detected!");
+            myFile.close();
+            return;
+        }
+    }
+
+    // =========================
+    // Write headers
+    // =========================
+    for (size_t j = 0; j < dataset.size(); ++j)
+    {
+        myFile << dataset[j].first;
+        if (j != dataset.size() - 1)
+            myFile << ",";
     }
     myFile << "\n";
-    
-    // Send data to the stream
-    for(uint32_t i = 0; i < dataset.at(0).second.size(); ++i)
+
+    // =========================
+    // Write data
+    // =========================
+    for (size_t i = 0; i < rowCount; ++i)
     {
-        for(uint32_t j = 0; j < dataset.size(); ++j)
+        for (size_t j = 0; j < dataset.size(); ++j)
         {
-            myFile << dataset.at(j).second.at(i);
-            if(j != dataset.size() - 1) myFile << ","; // No comma at end of line
+            if (i < dataset[j].second.size())
+                myFile << dataset[j].second[i];
+            else
+                myFile << ""; // safe fallback
+
+            if (j != dataset.size() - 1)
+                myFile << ",";
         }
         myFile << "\n";
     }
-    
-    // Close the file
+
     myFile.close();
 }
 
@@ -204,21 +301,27 @@ read_csv(std::string filename){
     return result;
 }
 
-
-//////////
 void
 KeyGenerated(std::string context, const std::string& appId, const std::string& keyId, const uint32_t& amountInBits){
 
     std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.find(appId);
+    if (it == m_nodePairs.end()) {
+        NS_LOG_ERROR("KeyGenerated: appId not found: " << appId
+                     << " (context=" << context << ")");
+        return;  
+    }
+    LinkDetails* ld = it->second;
+    if (!ld) {
+        NS_LOG_ERROR("KeyGenerated: LinkDetails* is null for appId=" << appId);
+        return;  
+    }
     std::string linkId = it->second->nodes;
-
-
-    std::map<std::string, uint32_t>::iterator it2 = it->second->m_keyIDGeneratedInBuffers.find ( keyId );
-    if (it2 == it->second->m_keyIDGeneratedInBuffers.end ()){ 
-        it->second->m_keyIDGeneratedInBuffers.insert( std::make_pair( keyId, amountInBits));
+    std::map<std::string, uint32_t>::iterator it2 = it->second->m_keyIDGeneratedInBuffers_QKD.find ( keyId );
+    if (it2 == it->second->m_keyIDGeneratedInBuffers_QKD.end ()){ 
+        it->second->m_keyIDGeneratedInBuffers_QKD.insert( std::make_pair( keyId, amountInBits));
     }else{
-        it->second->m_keysGeneratedBits += amountInBits;  
-        it->second->m_keysGenerated++;
+        it->second->m_keysGeneratedBits_QKD += amountInBits;  
+        it->second->m_keysGenerated_QKD++;
  
         if(showKeyAdded){ 
             if(outputFileType == "csv"){
@@ -241,112 +344,180 @@ KeyGenerated(std::string context, const std::string& appId, const std::string& k
     }  
 }
 
-/**
- * Keys fetched from qkdBuffers for transformation before delivery to end-user application
- */
 void
-KeyConsumedLink (std::string context, const uint32_t& srcNodeId, const uint32_t& dstNodeId, const uint32_t& amountInBits)
-{   
-    //std::cout << context << "\tsrcNodeId:" << srcNodeId << "\t dstNodeId:" << dstNodeId  << "\tamountInBits:" <<  amountInBits  << "\n";  
+KeyGeneratedPQC(std::string context, const uint32_t& srcNodeId, const uint32_t& dstNodeId, const std::string& keyId, const uint32_t& amountInBits)
+{
+    
+    for (std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.begin(); it != m_nodePairs.end(); ++it) 
+    { 
+        if(it->second->type == 0 && 
+                ( (it->second->srcKMSNodeId == srcNodeId && it->second->dstKMSNodeId == dstNodeId) || 
+                (it->second->srcKMSNodeId == dstNodeId && it->second->dstKMSNodeId == srcNodeId))
+            )
+        { 
+            LinkDetails* ld = it->second;
+            if (!ld) {
+                NS_LOG_ERROR("KeyGeneratedPQC: LinkDetails* is null for srcNodeId=" << srcNodeId << " and dstNodeId=" << dstNodeId);
+                return; 
+            }
+            std::string linkId = it->second->nodes;
+            std::map<std::string, uint32_t>::iterator it2 = it->second->m_keyIDGeneratedInBuffers_PQC.find ( keyId );
+            if (it2 == it->second->m_keyIDGeneratedInBuffers_PQC.end ()){ 
+                it->second->m_keyIDGeneratedInBuffers_PQC.insert( std::make_pair( keyId, amountInBits));
+            }else{
+                it->second->m_keysGeneratedBits_PQC += amountInBits;  
+                it->second->m_keysGenerated_PQC++;
+            }  
+            return;
+
+        }
+    }
+}
+
+void
+KeyWasted(std::string context, const uint32_t& srcNodeId, const uint32_t& dstNodeId, const std::string& keyId, const uint32_t& amountInBits)
+{
 
     for (std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.begin(); it != m_nodePairs.end(); ++it) 
     { 
-        if(it->second->type == 0 && it->second->srcKMSNodeId == srcNodeId && it->second->dstKMSNodeId == dstNodeId){
-
+        if(it->second->type == 0 && 
+                ( (it->second->srcKMSNodeId == srcNodeId && it->second->dstKMSNodeId == dstNodeId) || 
+                (it->second->srcKMSNodeId == dstNodeId && it->second->dstKMSNodeId == srcNodeId))
+            )
+        { 
+            LinkDetails* ld = it->second;
+            if (!ld) {
+                NS_LOG_ERROR("KeyGeneratedPQC: LinkDetails* is null for srcNodeId=" << srcNodeId << " and dstNodeId=" << dstNodeId);
+                return; 
+            }
             std::string linkId = it->second->nodes;
- 
-            it->second->m_keysConsumed++;
-            it->second->m_keysConsumedBits += amountInBits; 
-
-            if(showKeyAdded){ 
-                if(outputFileType == "csv"){
-                    logFile << (double)Simulator::Now().GetSeconds() << ",-," << linkId << "," << amountInBits;
-                    logFile << std::endl;
-                }else if(outputFileType == "json"){
-                    if(outputLogFile.size() > 0){ 
-                        logFile << ',';
-                    }
-                    nlohmann::json jsonRecord;
-                    jsonRecord["time"] = (double)Simulator::Now().GetSeconds();
-                    jsonRecord["id"] = linkId;
-                    jsonRecord["action"] = "-";
-                    jsonRecord["keysize"] = amountInBits;     
-                    outputLogFile.push_back(jsonRecord);
-                    logFile << jsonRecord.dump();;
-                    logFile << std::endl;
-                }
+            std::map<std::string, uint32_t>::iterator it2 = it->second->m_keyIDWasted.find ( keyId );
+            if (it2 == it->second->m_keyIDWasted.end ()){ 
+                it->second->m_keyIDWasted.insert( std::make_pair( keyId, amountInBits));
+            }else{
+                it->second->m_keysWastedBits += amountInBits;  
+                it->second->m_keysWasted++;
             }  
-            break;
+            return;
         }
-    } 
-
+    }
 }
 
+void
+TxKMSs (std::string context, Ptr<const Packet> p, const uint32_t& srcNodeId)
+{  
+    m_tx_count++;
+    m_tx_bits += p->GetSize();
+}
+
+void
+RxKMSs (std::string context, Ptr<const Packet> p, const Ipv4Address &addr,  const uint32_t& srcNodeId)
+{
+    m_rx_count++;
+    m_rx_bits += p->GetSize(); 
+}
+
+
 /**
- * Keys served from KMS to end-user application
+ * Keys fetched from q-buffers for transformation and stored in s-buffers before delivery to end-user application
  */
 void
-KeyServed (std::string context, const std::string& appId, const std::string& keyId, const uint32_t& amountInBits)
-{    
-    
-    //std::cout << appId << ";" << keyId << ";" << amountInBits << "\n";
-    std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.find(appId);
-    std::string linkId = it->second->nodes;
-    std::string jointKeyId = keyId + std::to_string(amountInBits);
-
-    std::map<std::string, uint32_t>::iterator it2 = it->second->m_keyIDConsumedInBuffers.find ( jointKeyId );
-
-    if (it2 == it->second->m_keyIDConsumedInBuffers.end ()){ 
-        it->second->m_keyIDConsumedInBuffers.insert( std::make_pair( jointKeyId, amountInBits) );
-    
-    }else{
-        //std::cout << "consumed" << "\t" << it->second->nodes << "\n"; 
-        it->second->m_keysConsumedBits += amountInBits;   
-        it->second->m_keysConsumed++;
-
-        if(showKeyServed){ 
-            if(outputFileType == "csv"){
-                logFile << (double)Simulator::Now().GetSeconds() << ",-," << linkId << "," << amountInBits;
-                logFile << std::endl;
-            }else if(outputFileType == "json"){
-                if(outputLogFile.size() > 0){
-                    logFile << ',';
-                }
-                nlohmann::json jsonRecord;
-                jsonRecord["time"] = (double)Simulator::Now().GetSeconds();
-                jsonRecord["id"] = linkId;
-                jsonRecord["action"] = "-";
-                jsonRecord["keysize"] = amountInBits;     
-                outputLogFile.push_back(jsonRecord);
-                logFile << jsonRecord.dump();;
-                logFile << std::endl;
+KeyPrepared (
+    std::string context, 
+    const std::string& ksid, 
+    const std::string& srcSaeId, 
+    const std::string& dstSaeId, 
+    const uint32_t& srcNodeId, 
+    const uint32_t& dstNodeId, 
+    const std::string& keyId, 
+    const uint32_t& amountInBits, 
+    const std::string& type
+){     
+    std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.find(ksid);
+    if(it == m_nodePairs.end())
+    {
+        for (std::map<std::string, LinkDetails* >::iterator it2 = m_nodePairs.begin(); it2 != m_nodePairs.end(); ++it2) 
+        { 
+            if(  
+                (
+                    (!srcSaeId.empty() && it2->second->etsi004srcApp && it2->second->etsi004srcApp->GetId() == srcSaeId) || 
+                    (!dstSaeId.empty() && it2->second->etsi004dstApp && it2->second->etsi004dstApp->GetId() == dstSaeId) ||
+                    (!dstSaeId.empty() && it2->second->etsi004srcApp && it2->second->etsi004srcApp->GetId() == dstSaeId) || 
+                    (!srcSaeId.empty() && it2->second->etsi004dstApp && it2->second->etsi004dstApp->GetId() == srcSaeId) ||
+                    (!srcSaeId.empty() && it2->second->etsi014srcApp && it2->second->etsi014srcApp->GetId() == srcSaeId) || 
+                    (!dstSaeId.empty() && it2->second->etsi014dstApp && it2->second->etsi014dstApp->GetId() == dstSaeId) ||
+                    (!dstSaeId.empty() && it2->second->etsi014srcApp && it2->second->etsi014srcApp->GetId() == dstSaeId) || 
+                    (!srcSaeId.empty() && it2->second->etsi014dstApp && it2->second->etsi014dstApp->GetId() == srcSaeId) ||
+                    (!ksid.empty() && it2->second->m_etsi014Ksid == ksid) || 
+                    (it2->second->srcKMSNodeId == srcNodeId && it2->second->dstKMSNodeId == dstNodeId) ||
+                    (it2->second->srcKMSNodeId == dstNodeId && it2->second->dstKMSNodeId == srcNodeId)
+                )
+            )
+            {
+                it = it2;
+                break;
             }
         }
     }
 
+    if(it != m_nodePairs.end())
+    {
+        std::string linkId = it->second->nodes;
+        std::string jointKeyId = keyId + std::to_string(amountInBits);
+
+
+        std::map<std::string, uint32_t>::iterator it2;
+        if(type == "pqc") 
+            it2 = it->second->m_keyIDPreparedInBuffers_PQC.find ( jointKeyId );
+        else 
+            it2 = it->second->m_keyIDPreparedInBuffers_QKD.find ( jointKeyId );
+        
+        //we track the first mentioning of keyId in our record
+        if (type == "qkd" && it2 == it->second->m_keyIDPreparedInBuffers_QKD.end ())
+            it->second->m_keyIDPreparedInBuffers_QKD.insert( std::make_pair( jointKeyId, amountInBits) );
+        else if (type == "pqc" && it2 == it->second->m_keyIDPreparedInBuffers_PQC.end ())
+            it->second->m_keyIDPreparedInBuffers_PQC.insert( std::make_pair( jointKeyId, amountInBits) );        
+        else{
+            //for the second key (we track key-pairs) we increase counters
+            if(type == "pqc") 
+            {
+                it->second->m_keysPreparedBits_PQC += amountInBits;   
+                it->second->m_keysPrepared_PQC++; 
+            }else if(type == "qkd") {
+                it->second->m_keysPreparedBits_QKD += amountInBits;   
+                it->second->m_keysPrepared_QKD++; 
+            } 
+        }   
+ 
+    } else {
+        std::cout << "KD: Unable to find m_nodePair! " << ksid << ";" << srcSaeId << ";" << dstSaeId << ";" << srcNodeId  << ";" <<  dstNodeId  << ";" << keyId << ";" << amountInBits << "\t" << type << "\n";
+    }
 }
 
 void
-RelayKeyTrace(
-    std::string context, 
-    const uint32_t& nodeId,  
+KeyRelayed(
+    std::string context,  
     const uint32_t& srcNodeId,
     const uint32_t& dstNodeId,
+    const std::string& relayedKeyId, 
     const uint32_t& amountInBits
 ){
- 
     for (std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.begin(); it != m_nodePairs.end(); ++it) 
     { 
-        if(it->second->type == 0 && ( (it->second->srcKMSNodeId == srcNodeId && it->second->dstKMSNodeId == dstNodeId)
-                                || (it->second->srcKMSNodeId == dstNodeId && it->second->dstKMSNodeId == srcNodeId))){
+        if(it->second->type == 0 && 
+                ( (it->second->srcKMSNodeId == srcNodeId && it->second->dstKMSNodeId == dstNodeId) || 
+                (it->second->srcKMSNodeId == dstNodeId && it->second->dstKMSNodeId == srcNodeId))
+            )
+        { 
+            std::string linkId = it->second->nodes; 
 
-            std::string linkId = it->second->nodes;
- 
             it->second->m_keysRelayed++;
-            it->second->m_keysRelayedBits += amountInBits; 
-
-            if(showKeyAdded){ 
-                if(outputFileType == "csv"){
+            it->second->m_keysRelayedBits += amountInBits;  
+ 
+            if(showKeyAdded)
+            { 
+                if(outputFileType == "csv")
+                {
                     logFile << (double)Simulator::Now().GetSeconds() << ",r," << linkId << "," << amountInBits;
                     logFile << std::endl;
                 }else if(outputFileType == "json"){
@@ -367,7 +538,244 @@ RelayKeyTrace(
         }
     } 
 }
+
+void
+KeyDelivered(
+    std::string context, 
+    const std::string& ksid, 
+    const std::string& srcSaeId, 
+    const std::string& dstSaeId, 
+    const uint32_t& srcNodeId, 
+    const uint32_t& dstNodeId, 
+    const std::string& keyId, 
+    const uint32_t& amountInBits, 
+    const std::string& type
+){   
+    std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.find(ksid);
+    if(it == m_nodePairs.end())
+    {
+        for (std::map<std::string, LinkDetails* >::iterator it2 = m_nodePairs.begin(); it2 != m_nodePairs.end(); ++it2) 
+        {   
+            if(  
+                it2->second->type > 0 && 
+                (
+                    (!ksid.empty() && it2->second->m_etsi014Ksid == ksid) || 
+                    (!srcSaeId.empty() && it2->second->etsi004srcApp && it2->second->etsi004srcApp->GetId() == srcSaeId ) || 
+                    (!dstSaeId.empty() && it2->second->etsi004dstApp && it2->second->etsi004dstApp->GetId() == dstSaeId)  ||
+                    (!dstSaeId.empty() && it2->second->etsi004srcApp && it2->second->etsi004srcApp->GetId() == dstSaeId ) || 
+                    (!srcSaeId.empty() && it2->second->etsi004dstApp && it2->second->etsi004dstApp->GetId() == srcSaeId)  ||
+                    (!srcSaeId.empty() && it2->second->etsi014srcApp && it2->second->etsi014srcApp->GetId() == srcSaeId ) || 
+                    (!dstSaeId.empty() && it2->second->etsi014dstApp && it2->second->etsi014dstApp->GetId() == dstSaeId)  ||
+                    (!dstSaeId.empty() && it2->second->etsi014srcApp && it2->second->etsi014srcApp->GetId() == dstSaeId ) || 
+                    (!srcSaeId.empty() && it2->second->etsi014dstApp && it2->second->etsi014dstApp->GetId() == srcSaeId)  ||
+                    (it2->second->srcKMSNodeId == srcNodeId && it2->second->dstKMSNodeId == dstNodeId) ||
+                    (it2->second->srcKMSNodeId == dstNodeId && it2->second->dstKMSNodeId == srcNodeId)
+                )
+            )
+            {
+                it = it2;
+                break;
+            }
+        }
+    }
+
+    if(it != m_nodePairs.end())
+    {
+        std::string linkId = it->second->nodes;
+        std::string jointKeyId = keyId + std::to_string(amountInBits);
  
+        std::map<std::string, uint32_t>::iterator it2;
+        if(type == "pqc") 
+            it2 = it->second->m_keyIDDeliveredFromKMS_PQC.find ( jointKeyId );
+        else
+            it2 = it->second->m_keyIDDeliveredFromKMS_QKD.find ( jointKeyId );
+        
+        if (type == "qkd" && it2 == it->second->m_keyIDDeliveredFromKMS_QKD.end ())
+            it->second->m_keyIDDeliveredFromKMS_QKD.insert( std::make_pair( jointKeyId, amountInBits) );
+        else if (type == "pqc" && it2 == it->second->m_keyIDDeliveredFromKMS_PQC.end ())
+            it->second->m_keyIDDeliveredFromKMS_PQC.insert( std::make_pair( jointKeyId, amountInBits) );        
+        else{
+            if(type == "pqc") 
+            {
+                it->second->m_keysDeliveredFromKMSBits_PQC += amountInBits;   
+                it->second->m_keysDeliveredFromKMS_PQC++;
+            } else if(type == "qkd") {
+                it->second->m_keysDeliveredFromKMSBits_QKD += amountInBits;   
+                it->second->m_keysDeliveredFromKMS_QKD++;
+            } 
+        }
+
+        if(showKeyServed){ 
+            if(outputFileType == "csv"){
+                logFile << (double)Simulator::Now().GetSeconds() << ",-," << linkId << "," << amountInBits;
+                logFile << std::endl;
+            }else if(outputFileType == "json")
+            {
+                if(outputLogFile.size() > 0)
+                    logFile << ',';
+                nlohmann::json jsonRecord;
+                jsonRecord["time"] = (double)Simulator::Now().GetSeconds();
+                jsonRecord["id"] = linkId;
+                jsonRecord["action"] = "-";
+                jsonRecord["keysize"] = amountInBits;     
+                outputLogFile.push_back(jsonRecord);
+                logFile << jsonRecord.dump();;
+                logFile << std::endl;
+            }
+        }
+        
+    } else {
+        std::cout << "KD: Unable to find m_nodePair! " << ksid << ";" << srcSaeId << ";" << dstSaeId << ";" << srcNodeId  << ";" <<  dstNodeId  << ";" << keyId << ";" << amountInBits << "\t" << type << "\n";
+    }
+}
+ 
+
+void
+KeyConsumedForEncryption(
+    std::string context,  
+    const std::string& saeId, 
+    const std::string& keyId, 
+    const uint32_t& amountInBits, 
+    const std::string& rawMessage, 
+    const std::string& encryptedMessage, 
+    Ptr<Packet> packet
+){   
+    if(saeId.empty())
+    {
+        std::cout << "saeID empty!";
+        return;
+    }
+
+    std::map<std::string, LinkDetails* >::iterator it;
+    for (std::map<std::string, LinkDetails* >::iterator it2 = m_nodePairs.begin(); it2 != m_nodePairs.end(); ++it2) 
+    {   
+        if(  
+            it2->second->type > 0 && 
+            (
+                (it2->second->etsi004srcApp && it2->second->etsi004srcApp->GetId() == saeId) || 
+                (it2->second->etsi004dstApp && it2->second->etsi004dstApp->GetId() == saeId) ||
+                (it2->second->etsi014srcApp && it2->second->etsi014srcApp->GetId() == saeId) || 
+                (it2->second->etsi014dstApp && it2->second->etsi014dstApp->GetId() == saeId)  
+            )
+        )
+        {
+            it = it2;
+            break;
+        }
+    } 
+
+    if(it != m_nodePairs.end())
+    {
+        std::string linkId = it->second->nodes;
+        std::string jointKeyId = keyId + std::to_string(amountInBits);
+
+        std::map<std::string, uint32_t>::iterator it2;
+        it2 = it->second->m_keyConsumedByAppForEncryption.find ( jointKeyId );
+        
+        if (it2 == it->second->m_keyConsumedByAppForEncryption.end ())
+            it->second->m_keyConsumedByAppForEncryption.insert( std::make_pair( jointKeyId, amountInBits) );
+        else{
+            it->second->m_keysConsumedByAppForEncryptionBits += amountInBits;   
+            it->second->m_keysConsumedByAppForEncryption++;
+        }
+        
+    } else {
+        std::cout << "KeyConsumedForEncryption: Unable to find m_nodePair! " << saeId << ";" << keyId << ";" << amountInBits << "\t" << packet->GetUid() << "\n";
+    }
+}
+
+void
+KeyConsumedForAuthentication(
+    std::string context,  
+    const std::string& saeId, 
+    const std::string& keyId, 
+    const uint32_t& amountInBits,  
+    const std::string& authenticatedMessage,
+    const std::string& authTag,  
+    Ptr<Packet> packet
+){   
+    if(saeId.empty())
+    {
+        std::cout << "saeID empty!";
+        return;
+    }
+
+    bool appDetected = false;
+    std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.begin();
+    for (std::map<std::string, LinkDetails* >::iterator it2 = m_nodePairs.begin(); it2 != m_nodePairs.end(); ++it2) 
+    {   
+        if(  
+            it2->second->type > 0 && 
+            (
+                (it2->second->etsi004srcApp && it2->second->etsi004srcApp->GetId() == saeId) || 
+                (it2->second->etsi004dstApp && it2->second->etsi004dstApp->GetId() == saeId) ||
+                (it2->second->etsi014srcApp && it2->second->etsi014srcApp->GetId() == saeId) || 
+                (it2->second->etsi014dstApp && it2->second->etsi014dstApp->GetId() == saeId) 
+            )
+        )
+        {
+            it = it2;
+            appDetected = true;
+            break;
+        }
+    } 
+    
+
+    if(appDetected && it != m_nodePairs.end())
+    {
+    
+        std::string linkId = it->second->nodes;
+        std::string jointKeyId = keyId + std::to_string(amountInBits);
+
+        std::map<std::string, uint32_t>::iterator it2;
+        it2 = it->second->m_keyConsumedByAppForAuthentication.find ( jointKeyId );
+
+        if (it2 == it->second->m_keyConsumedByAppForAuthentication.end ())
+            it->second->m_keyConsumedByAppForAuthentication.insert( std::make_pair( jointKeyId, amountInBits) );
+        else{
+            it->second->m_keysConsumedByAppForAuthenticationBits += amountInBits;   
+            it->second->m_keysConsumedByAppForAuthentication++;
+        }
+        
+    } else {
+        std::cout << "KeyConsumedForAuthentication: Unable to find m_nodePair! " << saeId << ";\t" << keyId << "\t;" << amountInBits << "\t" << packet->GetUid() << "\n";
+    }
+}
+
+
+
+void
+Etsi004KSIDGenerated( 
+    std::string context, 
+    const std::string& ksid,
+    const std::string& srcSaeId,
+    const std::string& dstSaeId,
+    const uint32_t& chunkSize
+){
+    for (std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.begin(); it != m_nodePairs.end(); ++it) 
+    {   
+
+        if(
+            it->second->type == 1 && 
+            it->second->etsi004srcApp &&
+            it->second->etsi004dstApp &&
+            it->second->etsi004srcApp->GetId() == srcSaeId && 
+            it->second->etsi004dstApp->GetId() == dstSaeId &&
+            it->second->m_etsi014Ksid.empty() && 
+            (
+                (it->second->etsi004srcApp->GetEncryptionKeySize() ==  chunkSize && it->second->etsi004dstApp->GetEncryptionKeySize() ==  chunkSize) || 
+                (it->second->etsi004srcApp->GetAuthenticationKeySize() ==  chunkSize && it->second->etsi004dstApp->GetAuthenticationKeySize() ==  chunkSize)
+            )
+        ){  
+            //std::cout << " Update ksid value to " << ksid << " of record " << srcSaeId << " and " << dstSaeId << "\n";
+            it->second->m_etsi014Ksid = ksid;
+            //m_nodePairs.insert( std::make_pair( ksid,  it->second) );
+            //m_nodePairs.erase(it);
+            break;
+        }
+    }  
+}
+
 void
 SentPacket(std::string context, const std::string& appId, Ptr<const Packet> p)
 {   
@@ -415,62 +823,39 @@ bool DoesLinkExist(
 void MissedSendPacketCall (std::string context, const std::string& appId, Ptr<const Packet> p)
 {
     std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.find(appId);
-    it->second->m_missedSendPacketCalls++;
+    if(it != m_nodePairs.end())
+    {
+        it->second->m_missedSendPacketCalls++;
+    }else{
+        std::cout << context << "\t Unknown appId: " << appId << "\n";
+    }
 }
 
 void
 ReceivedPacket(std::string context, const std::string& appId, Ptr<const Packet> p)
 {
     std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.find(appId);
-    it->second->m_bytes_received += p->GetSize();   
-    it->second->m_appPacketsReceived++;
+    if(it != m_nodePairs.end())
+    {
+        it->second->m_bytes_received += p->GetSize();   
+        it->second->m_appPacketsReceived++;
+    }else{
+        std::cout << context << "\t Unknown appId: " << appId << "\n";
+    }
 }
 
 void
 SentPacketSig(std::string context, const std::string& appId, Ptr<const Packet> p)
 {
     std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.find(appId);
-    it->second->m_sig_bytes_sent += p->GetSize();  
-    it->second->m_appSigPacketsSent++;
-    std::string linkId = it->second->nodes;
- 
-    if(outputFileType == "csv"){
-        logFile << (double)Simulator::Now().GetSeconds() << ",app2app_sig," << linkId << "," << p->GetSize();
-        logFile << std::endl;
-    }else if(outputFileType == "json"){
-        if(outputLogFile.size() > 0){
-            logFile << ',';
-        }
-        nlohmann::json jsonRecord;
-        jsonRecord["time"] = (double)Simulator::Now().GetSeconds();
-        jsonRecord["id"] = linkId;
-        jsonRecord["action"] = "app2app_sig";
-        jsonRecord["keysize"] = p->GetSize();     
-        outputLogFile.push_back(jsonRecord);
-        logFile << jsonRecord.dump();;
-        logFile << std::endl;
-    } 
-}
-
-void
-ReceivedPacketSig(std::string context, const std::string& appId, Ptr<const Packet> p)
-{
-    std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.find(appId);
-    it->second->m_sig_bytes_received += p->GetSize();   
-    it->second->m_appSigPacketsReceived++;
-}
-
-void
-SentPacketToKMS(std::string context, const std::string& appId, Ptr<const Packet> p)
-{
-    std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.find(appId);
-    it->second->m_bytes_sent_to_kms += p->GetSize();
-    it->second->m_kmsPacketsSent++; 
-    std::string linkId = it->second->nodes;
-
-    if(showKeyAdded){ 
+    if(it != m_nodePairs.end())
+    {
+        it->second->m_sig_bytes_sent += p->GetSize();  
+        it->second->m_appSigPacketsSent++;
+        std::string linkId = it->second->nodes;
+     
         if(outputFileType == "csv"){
-            logFile << (double)Simulator::Now().GetSeconds() << ",app2kms," << linkId << "," << p->GetSize();
+            logFile << (double)Simulator::Now().GetSeconds() << ",app2app_sig," << linkId << "," << p->GetSize();
             logFile << std::endl;
         }else if(outputFileType == "json"){
             if(outputLogFile.size() > 0){
@@ -479,12 +864,60 @@ SentPacketToKMS(std::string context, const std::string& appId, Ptr<const Packet>
             nlohmann::json jsonRecord;
             jsonRecord["time"] = (double)Simulator::Now().GetSeconds();
             jsonRecord["id"] = linkId;
-            jsonRecord["action"] = "app2kms";
+            jsonRecord["action"] = "app2app_sig";
             jsonRecord["keysize"] = p->GetSize();     
             outputLogFile.push_back(jsonRecord);
             logFile << jsonRecord.dump();;
             logFile << std::endl;
+        } 
+    }else{
+        std::cout << context << "\t Unknown appId: " << appId << "\n";
+    }
+}
+
+void
+ReceivedPacketSig(std::string context, const std::string& appId, Ptr<const Packet> p)
+{
+    std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.find(appId);
+    if(it != m_nodePairs.end())
+    {
+        it->second->m_sig_bytes_received += p->GetSize();   
+        it->second->m_appSigPacketsReceived++;
+    }else{
+        std::cout << context << "\t Unknown appId: " << appId << "\n";
+    }
+}
+
+void
+SentPacketToKMS(std::string context, const std::string& appId, Ptr<const Packet> p)
+{
+    std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.find(appId);
+    if(it != m_nodePairs.end())
+    {
+        it->second->m_bytes_sent_to_kms += p->GetSize();
+        it->second->m_kmsPacketsSent++; 
+        std::string linkId = it->second->nodes;
+
+        if(showKeyAdded){ 
+            if(outputFileType == "csv"){
+                logFile << (double)Simulator::Now().GetSeconds() << ",app2kms," << linkId << "," << p->GetSize();
+                logFile << std::endl;
+            }else if(outputFileType == "json"){
+                if(outputLogFile.size() > 0){
+                    logFile << ',';
+                }
+                nlohmann::json jsonRecord;
+                jsonRecord["time"] = (double)Simulator::Now().GetSeconds();
+                jsonRecord["id"] = linkId;
+                jsonRecord["action"] = "app2kms";
+                jsonRecord["keysize"] = p->GetSize();     
+                outputLogFile.push_back(jsonRecord);
+                logFile << jsonRecord.dump();;
+                logFile << std::endl;
+            }
         }
+    }else{
+        std::cout << context << "\t Unknown appId: " << appId << "\n";
     }
 }
 
@@ -492,27 +925,32 @@ void
 ReceivedPacketFromKMS(std::string context, const std::string& appId, Ptr<const Packet> p)
 {     
     std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.find(appId);
-    it->second->m_bytes_received_from_kms += p->GetSize();   
-    it->second->m_kmsPacketsReceived++;
-    std::string linkId = it->second->nodes;
+    if(it != m_nodePairs.end())
+    {
+        it->second->m_bytes_received_from_kms += p->GetSize();   
+        it->second->m_kmsPacketsReceived++;
+        std::string linkId = it->second->nodes;
 
-    if(showKeyServed){ 
-        if(outputFileType == "csv"){
-            logFile << (double)Simulator::Now().GetSeconds() << ",kms2app," << linkId << "," << p->GetSize();
-            logFile << std::endl;
-        }else if(outputFileType == "json"){
-            if(outputLogFile.size() > 0){
-                logFile << ',';
+        if(showKeyServed){ 
+            if(outputFileType == "csv"){
+                logFile << (double)Simulator::Now().GetSeconds() << ",kms2app," << linkId << "," << p->GetSize();
+                logFile << std::endl;
+            }else if(outputFileType == "json"){
+                if(outputLogFile.size() > 0){
+                    logFile << ',';
+                }
+                nlohmann::json jsonRecord;
+                jsonRecord["time"] = (double)Simulator::Now().GetSeconds();
+                jsonRecord["id"] = linkId;
+                jsonRecord["action"] = "kms2app";
+                jsonRecord["keysize"] = p->GetSize();     
+                outputLogFile.push_back(jsonRecord);
+                logFile << jsonRecord.dump();;
+                logFile << std::endl;
             }
-            nlohmann::json jsonRecord;
-            jsonRecord["time"] = (double)Simulator::Now().GetSeconds();
-            jsonRecord["id"] = linkId;
-            jsonRecord["action"] = "kms2app";
-            jsonRecord["keysize"] = p->GetSize();     
-            outputLogFile.push_back(jsonRecord);
-            logFile << jsonRecord.dump();;
-            logFile << std::endl;
         }
+    }else{
+        std::cout << context << "\t Unknown appId: " << appId << "\n";
     }
 }
 
@@ -521,57 +959,69 @@ CreateOutputForCPU(std::string outputStatsName)
 {
     std::vector<std::pair<std::string, std::vector<uint32_t> > > output;
 
-    for (std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.begin(); it != m_nodePairs.end(); ++it) {
+    for (std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.begin(); it != m_nodePairs.end(); ++it) 
+    {
 
         if(it->second->m_printed)continue;
 
-        std::vector<uint32_t> temp(45,0);
+        std::vector<uint32_t> temp(55,0);
         temp[0] = it->second->type;
+
         
-        if(it->second->type == 0){
+        if(it->second->type == 0)
+        {  
+            if(it->second->m_keysGeneratedBits_QKD && it->second->m_keysGenerated_QKD)
+                it->second->m_avgSizeOfKeysGenerated_QKD = (double) (it->second->m_keysGeneratedBits_QKD / it->second->m_keysGenerated_QKD);
 
-            double avgSizeOfConsumedKeys = 0;
-            for (std::map<std::string, uint32_t>::iterator it2 = it->second->m_keyIDConsumedInBuffers.begin(); 
-                it2 != it->second->m_keyIDConsumedInBuffers.end(); ++it2) {
-                avgSizeOfConsumedKeys += it2->second;
-            }
-            avgSizeOfConsumedKeys = avgSizeOfConsumedKeys/it->second->m_keyIDConsumedInBuffers.size();
-            it->second->m_avgSizeOfConsumedKeys = avgSizeOfConsumedKeys;
+            if(it->second->m_keysGeneratedBits_PQC && it->second->m_keysGenerated_PQC)
+                it->second->m_avgSizeOfKeysGenerated_PQC = (double) (it->second->m_keysGeneratedBits_PQC / it->second->m_keysGenerated_PQC);
 
-            double avgSizeOfGeneratedKeys = 0;
-            for (std::map<std::string, uint32_t>::iterator it2 = it->second->m_keyIDGeneratedInBuffers.begin(); 
-                it2 != it->second->m_keyIDGeneratedInBuffers.end(); ++it2) {
-                avgSizeOfGeneratedKeys += it2->second;
-            }
-            avgSizeOfGeneratedKeys = avgSizeOfGeneratedKeys/it->second->m_keyIDGeneratedInBuffers.size();
-            it->second->m_avgSizeOfGeneratedKeys = avgSizeOfGeneratedKeys;
+            if(it->second->m_keysPreparedBits_QKD && it->second->m_keysPrepared_QKD)
+                it->second->m_avgSizeOfKeysPrepared_QKD = (double) (it->second->m_keysPreparedBits_QKD / it->second->m_keysPrepared_QKD);
+
+            if(it->second->m_keysPreparedBits_PQC && it->second->m_keysPrepared_PQC)
+                it->second->m_avgSizeOfKeysPrepared_PQC = (double) (it->second->m_keysPreparedBits_PQC / it->second->m_keysPrepared_PQC);
             
             temp[1] = it->second->m_linkDistance;
             temp[2] = it->second->m_keyRate;
-            temp[3] = it->second->m_keysGenerated;
-            temp[4] = it->second->m_keysGeneratedBits;
-            temp[5] = it->second->m_keysConsumed;
-            temp[6] = it->second->m_keysConsumedBits;
-            temp[7] = it->second->m_avgSizeOfGeneratedKeys;
-            temp[8] = it->second->m_avgSizeOfConsumedKeys;
+            temp[3] = it->second->m_keysGenerated_QKD;
+            temp[4] = it->second->m_keysGeneratedBits_QKD;
+            temp[5] = it->second->m_keysPrepared_QKD;
+            temp[6] = it->second->m_keysPreparedBits_QKD;
+            temp[7] = it->second->m_avgSizeOfKeysGenerated_QKD;
+            temp[8] = it->second->m_avgSizeOfKeysPrepared_QKD;
             temp[9] = it->second->m_bufferCapacityBits;
             temp[23] = it->second->m_startTime;
             temp[24] = it->second->m_stopTime;
 
             temp[36] = it->second->m_keysRelayed;
             temp[37] = it->second->m_keysRelayedBits;
-            //temp[38] = it->second->m_keysWasted;
-            //temp[39] = it->second->m_keysWastedBits;
+
+            temp[38] = it->second->m_keysPrepared_PQC;
+            temp[39] = it->second->m_keysPreparedBits_PQC;
+            temp[40] = it->second->m_avgSizeOfKeysPrepared_PQC;
+
+            temp[49] = it->second->m_keysGenerated_PQC;
+            temp[50] = it->second->m_keysGeneratedBits_PQC;
+            temp[51] = it->second->m_avgSizeOfKeysGenerated_PQC;
+
+            temp[41] = it->second->m_keysWasted;
+            temp[42] = it->second->m_keysWastedBits;
+
 
         }else{
 
-            double avgSizeOfConsumedKeys = 0;
-            for (std::map<std::string, uint32_t>::iterator it2 = it->second->m_keyIDConsumedInBuffers.begin(); 
-                it2 != it->second->m_keyIDConsumedInBuffers.end(); ++it2) {
-                avgSizeOfConsumedKeys += it2->second;
-            }
-            avgSizeOfConsumedKeys = avgSizeOfConsumedKeys/it->second->m_keyIDConsumedInBuffers.size();
-            it->second->m_avgSizeOfConsumedKeys = avgSizeOfConsumedKeys;
+            if(it->second->m_keysDeliveredFromKMSBits_QKD && it->second->m_keysDeliveredFromKMS_QKD)
+                it->second->m_avgSizeOfKeysDeliveredFromKMS_QKD = (double) (it->second->m_keysDeliveredFromKMSBits_QKD / it->second->m_keysDeliveredFromKMS_QKD);
+
+            if(it->second->m_keysPreparedBits_PQC && it->second->m_keysPrepared_PQC)
+                it->second->m_avgSizeOfKeysDeliveredFromKMS_PQC = (double) (it->second->m_keysDeliveredFromKMSBits_PQC / it->second->m_keysDeliveredFromKMS_PQC);
+
+            if(it->second->m_keysConsumedByAppForEncryptionBits && it->second->m_keysConsumedByAppForEncryption)
+                it->second->m_avgSizeOfKeysConsumedByAppForEncryption = (double) (it->second->m_keysConsumedByAppForEncryptionBits / it->second->m_keysConsumedByAppForEncryption);
+
+            if(it->second->m_keysConsumedByAppForAuthenticationBits && it->second->m_keysConsumedByAppForAuthentication)
+                it->second->m_avgSizeOfKeysConsumedByAppForAuthentication = (double) (it->second->m_keysConsumedByAppForAuthenticationBits / it->second->m_keysConsumedByAppForAuthentication);
 
             temp[10] = it->second->m_bytes_sent;
             temp[11] = it->second->m_bytes_received;
@@ -589,9 +1039,9 @@ CreateOutputForCPU(std::string outputStatsName)
             temp[23] = it->second->m_startTime;
             temp[24] = it->second->m_stopTime;
 
-            temp[5] = it->second->m_keysConsumed;
-            temp[6] = it->second->m_keysConsumedBits;
-            temp[8] = it->second->m_avgSizeOfConsumedKeys;
+            temp[5] = it->second->m_keysDeliveredFromKMS_QKD;
+            temp[6] = it->second->m_keysDeliveredFromKMSBits_QKD;
+            temp[8] = it->second->m_avgSizeOfKeysDeliveredFromKMS_QKD;
 
             temp[25] = it->second->m_sig_bytes_sent;
             temp[26] = it->second->m_sig_bytes_received;
@@ -603,8 +1053,21 @@ CreateOutputForCPU(std::string outputStatsName)
             temp[31] = it->second->m_kmsPacketsSent;
             temp[32] = it->second->m_kmsPacketsReceived;
  
- 
+            temp[38] = it->second->m_keysDeliveredFromKMS_PQC;
+            temp[39] = it->second->m_keysDeliveredFromKMSBits_PQC;
+            temp[40] = it->second->m_avgSizeOfKeysDeliveredFromKMS_PQC;  
+
+            temp[43] = it->second->m_keysConsumedByAppForEncryption;
+            temp[44] = it->second->m_keysConsumedByAppForEncryptionBits;
+            temp[45] = it->second->m_avgSizeOfKeysConsumedByAppForEncryption;
+
+            temp[46] = it->second->m_keysConsumedByAppForAuthentication;
+            temp[47] = it->second->m_keysConsumedByAppForAuthenticationBits;
+            temp[48] = it->second->m_avgSizeOfKeysConsumedByAppForAuthentication;            
+
         } 
+
+        //std::cout << "CreateOutputForCPU:" << it->second->nodes << "\t" <<  it->second->m_keysPrepared_QKD << "\n";
 
         output.push_back( std::make_pair( it->second->nodes, temp) );
         it->second->m_printed = 1;
@@ -614,35 +1077,45 @@ CreateOutputForCPU(std::string outputStatsName)
 }
 
 void
-Ratio(std::string outputStatsName, uint32_t cpuCounter){
-
+Ratio(std::string outputStatsName, uint32_t cpuCounter)
+{
     // prepare a JSON file
     nlohmann::json output;
 
     //Initialize JSON file
     for (std::map<std::string, LinkDetails* >::iterator it = m_nodePairs.begin(); it != m_nodePairs.end(); ++it) {
 
-        if(it->second->m_printed)continue;
+        //if(it->second->m_printed)continue;
         std::string nodes = it->second->nodes;
 
-        if(it->second->type == 0){
+        //std::cout << "******** ID:" << it->first << "\n";
+        //std::cout << "******** it->second->type:" << it->second->type << "\n";
+            
+        if(it->second->type == 0 || it->second->type == 5){
             output["qkd_links"][nodes]["Link distance (meters)"] = 0;
             output["qkd_links"][nodes]["Key rate (bit/sec)"] = 0;
-            output["qkd_links"][nodes]["Key-pairs generated"] = 0;
-            output["qkd_links"][nodes]["Key-pairs generated (bits)"] = 0;
-            output["qkd_links"][nodes]["Key-pairs consumed"] = 0;
-            output["qkd_links"][nodes]["Key-pairs consumed (bits)"] = 0;
+            output["qkd_links"][nodes]["Key-pairs generated QKD"] = 0;
+            output["qkd_links"][nodes]["Key-pairs generated QKD (bits)"] = 0;
+            output["qkd_links"][nodes]["Key-pairs generated PQC"] = 0;
+            output["qkd_links"][nodes]["Key-pairs generated PQC (bits)"] = 0;
+            output["qkd_links"][nodes]["Key-pairs prepared QKD"] = 0;
+            output["qkd_links"][nodes]["Key-pairs prepared QKD (bits)"] = 0;
+            output["qkd_links"][nodes]["Key-pairs prepared PQC"] = 0;
+            output["qkd_links"][nodes]["Key-pairs prepared PQC (bits)"] = 0;
             output["qkd_links"][nodes]["Key-pairs relayed"] = 0;
             output["qkd_links"][nodes]["Key-pairs relayed (bits)"] = 0;
-            //output["qkd_links"][nodes]["Key-pairs wasted"] = 0;
-            //output["qkd_links"][nodes]["Key-pairs wasted (bits)"] = 0;
-            output["qkd_links"][nodes]["Average size of generated key-pairs (bits)"] = 0;
-            output["qkd_links"][nodes]["Average size of consumed key-pairs (bits)"] = 0;
+            output["qkd_links"][nodes]["Key-pairs wasted"] = 0;
+            output["qkd_links"][nodes]["Key-pairs wasted (bits)"] = 0;
+            output["qkd_links"][nodes]["Average size of generated key-pairs QKD (bits)"] = 0;
+            output["qkd_links"][nodes]["Average size of prepared key-pairs QKD (bits)"] = 0;
+            output["qkd_links"][nodes]["Average size of prepared key-pairs PQC (bits)"] = 0;
+            output["qkd_links"][nodes]["Average size of relayed key-pairs (bits)"] = 0;
             output["qkd_links"][nodes]["Start Time (sec)"] = 0;
             output["qkd_links"][nodes]["Stop Time (sec)"] = 0;
             output["qkd_links"][nodes]["QKDBuffer Capacity (bits)"] = 0;
-        }else{         
-            std::string type = (it->second->type == 1) ? "etsi_004": "etsi_014";
+        }else{
+            std::string type = (it->second->type == 1) ? "ETSI_004": "ETSI_014";
+            output[type][nodes]["QKDApps Statistics"]["ID"] = it->first;
             output[type][nodes]["QKDApps Statistics"]["Bytes Sent"] = 0;
             output[type][nodes]["QKDApps Statistics"]["Bytes Received"] = 0;
             output[type][nodes]["QKDApps Statistics"]["Packets Sent"] = 0;
@@ -671,9 +1144,21 @@ Ratio(std::string outputStatsName, uint32_t cpuCounter){
             output[type][nodes]["QKDApps-KMS Statistics"]["Packets Sent"] = 0;
             output[type][nodes]["QKDApps-KMS Statistics"]["Packets Received"] = 0;
 
-            output[type][nodes]["Key Consumption Statistics"]["Key-pairs consumed"] = 0;
-            output[type][nodes]["Key Consumption Statistics"]["Key-pairs consumed (bits)"] = 0;
-            output[type][nodes]["Key Consumption Statistics"]["Average size of consumed key-pairs (bits)"] = 0;
+            output[type][nodes]["Key Consumption Statistics"]["QKD Key-pairs Provided by KMS"] = 0;
+            output[type][nodes]["Key Consumption Statistics"]["QKD Key-pairs Provided by KMS (bits)"] = 0;
+            output[type][nodes]["Key Consumption Statistics"]["Average size of QKD Key-pairs Provided by KMS (bits)"] = 0;
+
+            output[type][nodes]["Key Consumption Statistics"]["PQC Key-pairs Provided by KMS"] = 0;
+            output[type][nodes]["Key Consumption Statistics"]["PQC Key-pairs Provided by KMS (bits)"] = 0;
+            output[type][nodes]["Key Consumption Statistics"]["Average size of PQC Key-pairs Provided by KMS (bits)"] = 0;
+
+            output[type][nodes]["Key Consumption Statistics"]["Key-pairs Consumed by App for Encryption/Decryption"] = 0;
+            output[type][nodes]["Key Consumption Statistics"]["Key-pairs Consumed by App for Encryption/Decryption (bits)"] = 0;
+            output[type][nodes]["Key Consumption Statistics"]["Average size of Key-pairs Consumed by App for Encryption/Decryption (bits)"] = 0;
+
+            output[type][nodes]["Key Consumption Statistics"]["Key-pairs Consumed by App for Authentication"] = 0;
+            output[type][nodes]["Key Consumption Statistics"]["Key-pairs Consumed by App for Authentication"] = 0;
+            output[type][nodes]["Key Consumption Statistics"]["Average size of Key-pairs Consumed by App for Authentication (bits)"] = 0;
         }  
     }
     
@@ -693,77 +1178,92 @@ Ratio(std::string outputStatsName, uint32_t cpuCounter){
         //for each column in cpu value file
         for(uint32_t j=0; j<cpuValues.at(i).size(); j++ )
         {   
-            if(i>0){
+            if(i>0)
+            {
                 //for each value in column
-                for(uint32_t k=1; k<cpuValues.at(i).at(j).second.size(); k++ ){
+                for(uint32_t k=1; k<cpuValues.at(i).at(j).second.size(); k++)
+                {
                     cpuValues.at(0).at(j).second.at(k) += cpuValues.at(i).at(j).second.at(k);
                 }
             }
 
-            if(i+1 == cpuValues.size()){
+            if(i+1 == cpuValues.size())
+            {
                 std::string type = "qkd_links";
                 std::string nodes = cpuValues.at(i).at(j).first;
 
-                if(cpuValues.at(i).at(j).second.at(0) == 1) {
-                    type = "etsi_004";
-                }else if(cpuValues.at(i).at(j).second.at(0) == 2){
-                    type = "etsi_014";
-                }
+                if(cpuValues.at(i).at(j).second.at(0) == 1)
+                    type = "ETSI_004";
+                else if(cpuValues.at(i).at(j).second.at(0) == 2)
+                    type = "ETSI_014"; 
+                
 
                 std::cout << "********************************** \n\n";
 
-                if(type == "qkd_links"){
+                //std::cout << "Ratio:" << nodes << "\t" <<  cpuValues.at(0).at(j).second.at(5) << "\n";
+
+                if(type == "qkd_links")
+                {
                     output[type][nodes]["Link distance (meters)"]                   = cpuValues.at(0).at(j).second.at(1);
                     output[type][nodes]["Key rate (bit/sec)"]                       = cpuValues.at(0).at(j).second.at(2);
-                    output[type][nodes]["Key-pairs generated"]                      = cpuValues.at(0).at(j).second.at(3);
-                    output[type][nodes]["Key-pairs generated (bits)"]               = cpuValues.at(0).at(j).second.at(4);
-                    output[type][nodes]["Key-pairs consumed"]                       = cpuValues.at(0).at(j).second.at(5);
-                    output[type][nodes]["Key-pairs consumed (bits)"]                = cpuValues.at(0).at(j).second.at(6); 
+                    output[type][nodes]["Key-pairs generated QKD"]                  = cpuValues.at(0).at(j).second.at(3);
+                    output[type][nodes]["Key-pairs generated QKD (bits)"]           = cpuValues.at(0).at(j).second.at(4);
+                    output[type][nodes]["Key-pairs generated PQC"]                  = cpuValues.at(0).at(j).second.at(49);
+                    output[type][nodes]["Key-pairs generated PQC (bits)"]           = cpuValues.at(0).at(j).second.at(50);
+                    output[type][nodes]["Key-pairs prepared QKD"]                   = cpuValues.at(0).at(j).second.at(5);
+                    output[type][nodes]["Key-pairs prepared QKD (bits)"]            = cpuValues.at(0).at(j).second.at(6); 
+                    output[type][nodes]["Key-pairs prepared PQC"]                   = cpuValues.at(0).at(j).second.at(38);
+                    output[type][nodes]["Key-pairs prepared PQC (bits)"]            = cpuValues.at(0).at(j).second.at(39); 
+ 
                     output[type][nodes]["Key-pairs relayed"]                        = cpuValues.at(0).at(j).second.at(36);
                     output[type][nodes]["Key-pairs relayed (bits)"]                 = cpuValues.at(0).at(j).second.at(37);
-                    //output[type][nodes]["Key-pairs wasted"]                       = cpuValues.at(0).at(j).second.at(38);
-                    //output[type][nodes]["Key-pairs wasted (bits)"]                = cpuValues.at(0).at(j).second.at(39);
-                    output[type][nodes]["Average size of generated key-pairs (bits)"]    = cpuValues.at(0).at(j).second.at(7); 
-                    output[type][nodes]["Average size of consumed key-pairs (bits)"]     = cpuValues.at(0).at(j).second.at(8);
+                    output[type][nodes]["Key-pairs wasted"]                       = cpuValues.at(0).at(j).second.at(41);
+                    output[type][nodes]["Key-pairs wasted (bits)"]                = cpuValues.at(0).at(j).second.at(42);
+                    output[type][nodes]["Average size of generated key-pairs QKD (bits)"]    = cpuValues.at(0).at(j).second.at(7); 
+                    output[type][nodes]["Average size of generated key-pairs PQC (bits)"]    = cpuValues.at(0).at(j).second.at(51); 
+                    output[type][nodes]["Average size of prepared key-pairs QKD (bits)"]     = cpuValues.at(0).at(j).second.at(8);
                     output[type][nodes]["QKDBuffer Capacity (bits)"] = cpuValues.at(0).at(j).second.at(9);
-                    output[type][nodes]["Start Time (sec)"]     = cpuValues.at(0).at(j).second.at(23); 
-                    output[type][nodes]["Stop Time (sec)"]     = cpuValues.at(0).at(j).second.at(24); 
+                    output[type][nodes]["Start Time (sec)"]                         = cpuValues.at(0).at(j).second.at(23); 
+                    output[type][nodes]["Stop Time (sec)"]                          = cpuValues.at(0).at(j).second.at(24); 
 
+                    output[type][nodes]["Average size of relayed key-pairs (bits)"]     = 0;
+                    if(cpuValues.at(0).at(j).second.at(37) && cpuValues.at(0).at(j).second.at(36))
+                        output[type][nodes]["Average size of relayed key-pairs (bits)"] = (double) cpuValues.at(0).at(j).second.at(37) / cpuValues.at(0).at(j).second.at(36);
 
-                    std::cout << "QKD LINK: " << nodes << "\n"
-                    << "\nQKDBuffer Capacity (bits):\t" << output[type][nodes]["QKDBuffer Capacity (bits)"]
-                    << "\nLink distance (meters):\t\t" << output[type][nodes]["Link distance (meters)"]
-                    << "\nKey rate (bit/sec):\t\t" << output[type][nodes]["Key rate (bit/sec)"]
-                    << "\nKey-pairs generated:\t" << output[type][nodes]["Key-pairs generated"]
-                    << "\tKey-pairs generated (bits):\t" << output[type][nodes]["Key-pairs generated (bits)"]
-                    << "\nKey-pairs consumed:\t"  << output[type][nodes]["Key-pairs consumed"]
-                    << "\tKey-pairs consumed (bits):\t" << output[type][nodes]["Key-pairs consumed (bits)"] 
-                    << "\nKey-pairs relayed:\t" << output[type][nodes]["Key-pairs relayed"]
-                    << "\tKey-pairs relayed (bits):\t" << output[type][nodes]["Key-pairs relayed (bits)"]
-                    //<< "\nKey-pairs wasted:\t" << output[type][nodes]["Key-pairs wasted"]
-                    //<< "\tKey-pairs wasted (bits):\t" << output[type][nodes]["Key-pairs wasted (bits)"]
-                    << "\nAvg size of generated keys (bits):\t" << output[type][nodes]["Average size of generated key-pairs (bits)"]
-                    << "\nAvg size of consumed keys (bits):\t" << output[type][nodes]["Average size of consumed key-pairs (bits)"]
+                    std::cout << "QKD P2P LINK: " << nodes << "\n"
+                    << "\nQKDBuffer_Capacity_(bits):\t" << output[type][nodes]["QKDBuffer Capacity (bits)"]
+                    << "\nLink_distance_(meters):\t\t" << output[type][nodes]["Link distance (meters)"]
+                    << "\nKey_rate_(bit/sec):\t\t" << output[type][nodes]["Key rate (bit/sec)"]
+                    << "\nKey-pairs_generated QKD:\t" << output[type][nodes]["Key-pairs generated QKD"]
+                    << "\tKey-pairs_generated QKD (bits):\t" << output[type][nodes]["Key-pairs generated QKD (bits)"]
+                    << "\nAvg_size_of_generated keys_QKD_(bits):\t" << output[type][nodes]["Average size of generated key-pairs QKD (bits)"]
+                    << "\nKey-pairs_generated PQC:\t" << output[type][nodes]["Key-pairs generated PQC"]
+                    << "\tKey-pairs_generated PQC (bits):\t" << output[type][nodes]["Key-pairs generated PQC (bits)"]
+                    << "\nAvg_size_of_generated keys_PQC_(bits):\t" << output[type][nodes]["Average size of generated key-pairs PQC (bits)"]
+                    << "\nKey-pairs_prepared QKD:\t"  << output[type][nodes]["Key-pairs prepared QKD"]
+                    << "\tKey-pairs_prepared QKD (bits):\t" << output[type][nodes]["Key-pairs prepared QKD (bits)"] 
+                    << "\nAvg_size_of_prepared keys_QKD_(bits):\t" << output[type][nodes]["Average size of prepared key-pairs QKD (bits)"]
+                    << "\nKey-pairs_prepared PQC:\t"  << output[type][nodes]["Key-pairs prepared PQC"]
+                    << "\tKey-pairs_prepared PQC (bits):\t" << output[type][nodes]["Key-pairs prepared PQC (bits)"] 
+                    << "\nAvg_size_of_prepared keys_PQC_(bits):\t" << output[type][nodes]["Average size of prepared key-pairs PQC (bits)"]
+                    << "\nKey-pairs_relayed:\t" << output[type][nodes]["Key-pairs relayed"]
+                    << "\tKey-pairs_relayed (bits):\t" << output[type][nodes]["Key-pairs relayed (bits)"]
+                    << "\nKey-pairs wasted:\t" << output[type][nodes]["Key-pairs wasted"]
+                    << "\tKey-pairs wasted (bits):\t" << output[type][nodes]["Key-pairs wasted (bits)"]
+                    << "\nAvg_size_of_relayed keys_(bits):\t" << output[type][nodes]["Average size of relayed key-pairs (bits)"]
                     << "\nStart Time (sec):\t\t" << output[type][nodes]["Start Time (sec)"]
                     << "\nStop Time (sec):\t\t" << output[type][nodes]["Stop Time (sec)"]
                     << "\n\n";
-
+ 
                 }else{
+
                     output[type][nodes]["QKDApps Statistics"]["Bytes Sent"]          = cpuValues.at(0).at(j).second.at(10);
                     output[type][nodes]["QKDApps Statistics"]["Bytes Received"]      = cpuValues.at(0).at(j).second.at(11);
                     output[type][nodes]["QKDApps Statistics"]["Packets Sent"]        = cpuValues.at(0).at(j).second.at(12);
                     output[type][nodes]["QKDApps Statistics"]["Packets Received"]    = cpuValues.at(0).at(j).second.at(13);
-                    output[type][nodes]["QKDApps Statistics"]["Missed send packet calls"] = cpuValues.at(0).at(j).second.at(14);
+                    output[type][nodes]["QKDApps Statistics"]["Missed send packet calls"] = cpuValues.at(0).at(j).second.at(14); 
 
-                    double utilization = 0;
-                    if(cpuValues.at(0).at(j).second.at(12) && cpuValues.at(0).at(j).second.at(14)){
-                        utilization = (double) cpuValues.at(0).at(j).second.at(12) / (double) (cpuValues.at(0).at(j).second.at(12) + cpuValues.at(0).at(j).second.at(14)); 
-                        utilization *= 100;
-                        utilization = std::ceil(utilization * 100.0) / 100.0;
-                    }
-                    output[type][nodes]["QKDApps Statistics"]["Key/Data utilization (%)"] = utilization;
-
-                    output[type][nodes]["QKDApps Statistics"]["Encryption"]        = cpuValues.at(0).at(j).second.at(15);
+                    output[type][nodes]["QKDApps Statistics"]["Encryption"] = cpuValues.at(0).at(j).second.at(15);
                     if(output[type][nodes]["QKDApps Statistics"]["Encryption"] == 0){
                         output[type][nodes]["QKDApps Statistics"]["Encryption"] = "Unencrypted";
                     }else if(output[type][nodes]["QKDApps Statistics"]["Encryption"] == 1){
@@ -785,7 +1285,8 @@ Ratio(std::string outputStatsName, uint32_t cpuCounter){
                     output[type][nodes]["QKDApps Statistics"]["Packet Size (bytes)"] = cpuValues.at(0).at(j).second.at(18);
                     output[type][nodes]["QKDApps Statistics"]["Traffic Rate (bit/sec)"] = cpuValues.at(0).at(j).second.at(19);
 
-                    if(type == "etsi_004"){
+                    if(type == "etsi_004")
+                    {
                         output[type][nodes]["QKDApps Statistics"]["Size of Key Buffer for Encryption"] = cpuValues.at(0).at(j).second.at(20);
                         output[type][nodes]["QKDApps Statistics"]["Size of Key Buffer for Authentication"] = cpuValues.at(0).at(j).second.at(21);
                     }else{
@@ -804,78 +1305,113 @@ Ratio(std::string outputStatsName, uint32_t cpuCounter){
                     output[type][nodes]["QKDApps-KMS Statistics"]["Bytes Received"]   = cpuValues.at(0).at(j).second.at(30);
                     output[type][nodes]["QKDApps-KMS Statistics"]["Packets Sent"]     = cpuValues.at(0).at(j).second.at(31);
                     output[type][nodes]["QKDApps-KMS Statistics"]["Packets Received"] = cpuValues.at(0).at(j).second.at(32);
+ 
+                    output[type][nodes]["Key Consumption Statistics"]["QKD Key-pairs Provided by KMS"] = cpuValues.at(0).at(j).second.at(5);
+                    output[type][nodes]["Key Consumption Statistics"]["QKD Key-pairs Provided by KMS (bits)"]  = cpuValues.at(0).at(j).second.at(6);
+                    output[type][nodes]["Key Consumption Statistics"]["Average size of QKD Key-pairs Provided by KMS (bits)"] = cpuValues.at(0).at(j).second.at(8); 
 
-                    output[type][nodes]["Key Consumption Statistics"]["Key-pairs consumed"] = cpuValues.at(0).at(j).second.at(5);
-                    output[type][nodes]["Key Consumption Statistics"]["Key-pairs consumed (bits)"]  = cpuValues.at(0).at(j).second.at(6);
-                    output[type][nodes]["Key Consumption Statistics"]["Average size of consumed key-pairs (bits)"] = cpuValues.at(0).at(j).second.at(8); 
+                    output[type][nodes]["Key Consumption Statistics"]["PQC Key-pairs Provided by KMS"] = cpuValues.at(0).at(j).second.at(38);
+                    output[type][nodes]["Key Consumption Statistics"]["PQC Key-pairs Provided by KMS (bits)"]  = cpuValues.at(0).at(j).second.at(39);
+                    output[type][nodes]["Key Consumption Statistics"]["Average size of PQC Key-pairs Provided by KMS (bits)"] = cpuValues.at(0).at(j).second.at(40); 
 
-                    std::cout << "QKDApps " << type << ": " << nodes << "\n\n"
+                    output[type][nodes]["Key Consumption Statistics"]["Key-pairs Consumed by App for Encryption/Decryption"] = cpuValues.at(0).at(j).second.at(43);
+                    output[type][nodes]["Key Consumption Statistics"]["Key-pairs Consumed by App for Encryption/Decryption (bits)"] = cpuValues.at(0).at(j).second.at(44);
+                    output[type][nodes]["Key Consumption Statistics"]["Average size of Key-pairs Consumed by App for Encryption/Decryption (bits)"] = cpuValues.at(0).at(j).second.at(45);
+
+                    output[type][nodes]["Key Consumption Statistics"]["Key-pairs Consumed by App for Authentication"] = cpuValues.at(0).at(j).second.at(46);
+                    output[type][nodes]["Key Consumption Statistics"]["Key-pairs Consumed by App for Authentication (bits)"] = cpuValues.at(0).at(j).second.at(47);
+                    output[type][nodes]["Key Consumption Statistics"]["Average size of Key-pairs Consumed by App for Authentication (bits)"] = cpuValues.at(0).at(j).second.at(48);
+
+
+                    std::cout << "QKDApps " << type << ": " << nodes << "\n";
+                    std::cout << "ID: " <<  output[type][nodes]["QKDApps Statistics"]["ID"] << "\n\n"
                     << "Encryption:\t" << output[type][nodes]["QKDApps Statistics"]["Encryption"];
-                    if(output[type][nodes]["QKDApps Statistics"]["Encryption"] == "AES-256"){
+
+                    if(output[type][nodes]["QKDApps Statistics"]["Encryption"] == "AES-256")
+                    {
                         std::cout << "\nAES Key Lifetime (bytes):\t" << output[type][nodes]["QKDApps Statistics"]["AES Key Lifetime (bytes)"];
                     }
+
                     std::cout 
                     << "\nAuthentication:\t" << output[type][nodes]["QKDApps Statistics"]["Authentication"]
                     << "\nPacket Size (bytes):\t" << output[type][nodes]["QKDApps Statistics"]["Packet Size (bytes)"]
                     << "\nTraffic Rate (bit/sec):\t" << output[type][nodes]["QKDApps Statistics"]["Traffic Rate (bit/sec)"];
                     
-                    if(type == "etsi_004"){
+                    if(type == "etsi_004")
+                    {
                         std::cout 
                         << "\nSize of Key Buffer for Encryption:\t" << output[type][nodes]["QKDApps Statistics"]["Size of Key Buffer for Encryption"]
                         << "\nSize of Key Buffer for Authentication:\t" << output[type][nodes]["QKDApps Statistics"]["Size of Key Buffer for Authentication"];
                     }else{
                         std::cout 
-                        << "\nNumber of Keys to Fetch From KMS:\t" << output[type][nodes]["QKDApps Statistics"]["Number of Keys to Fetch From KMS"];
+                        << "\nNumber of Keys to Fetch From KMS:" << output[type][nodes]["QKDApps Statistics"]["Number of Keys to Fetch From KMS"];
                     }
 
                     std::cout
-                    << "\nMissed send packet calls:\t" << output[type][nodes]["QKDApps Statistics"]["Missed send packet calls"]
-                    << "\nSent (bytes):\t" <<  output[type][nodes]["QKDApps Statistics"]["Bytes Sent"]
-                    << "\tReceived (bytes):\t" << output[type][nodes]["QKDApps Statistics"]["Bytes Received"]
-                    << "\nSent (Packets):\t" <<  output[type][nodes]["QKDApps Statistics"]["Packets Sent"]
-                    << "\tReceived (Packets):\t" << output[type][nodes]["QKDApps Statistics"]["Packets Received"]
-                    << "\nKey/Data utilization (%):\t" << output[type][nodes]["QKDApps Statistics"]["Key/Data utilization (%)"]
+                    << "\nMissed_send_packet_calls:" << output[type][nodes]["QKDApps Statistics"]["Missed send packet calls"]
+                    << "\nQKDApps Statistics_Sent_(bytes):" <<  output[type][nodes]["QKDApps Statistics"]["Bytes Sent"]
+                    << "\nQKDApps Statistics_Received_(bytes):" << output[type][nodes]["QKDApps Statistics"]["Bytes Received"]
+                    << "\nQKDApps Statistics_Sent_(Packets):" <<  output[type][nodes]["QKDApps Statistics"]["Packets Sent"]
+                    << "\nQKDApps Statistics_Received_(Packets):" << output[type][nodes]["QKDApps Statistics"]["Packets Received"] 
                     
-                    << "\nRatio (bytes):\t" << (float)output[type][nodes]["QKDApps Statistics"]["Bytes Received"]/(float)output[type][nodes]["QKDApps Statistics"]["Bytes Sent"]
-                    << "\tRatio (packets):\t" << (float)output[type][nodes]["QKDApps Statistics"]["Packets Received"]/(float)output[type][nodes]["QKDApps Statistics"]["Packets Sent"]
-                    << "\nStart Time (sec):\t" << output[type][nodes]["QKDApps Statistics"]["Start Time (sec)"]
-                    << "\nStop Time (sec):\t" << output[type][nodes]["QKDApps Statistics"]["Stop Time (sec)"]
+                    << "\nData Packet Delivery Ratio:" << (float)output[type][nodes]["QKDApps Statistics"]["Bytes Received"]/(float)output[type][nodes]["QKDApps Statistics"]["Bytes Sent"]
+                    << "\nStart Time_(sec):" << output[type][nodes]["QKDApps Statistics"]["Start Time (sec)"]
+                    << "\nStop_Time_(sec):" << output[type][nodes]["QKDApps Statistics"]["Stop Time (sec)"]
                     << "\n"
 
                     << "\n- Signaling stats:"
-                    << "\nSent (bytes):\t" <<  output[type][nodes]["Signaling Statistics"]["Bytes Sent"]
-                    << "\tReceived (bytes):\t" << output[type][nodes]["Signaling Statistics"]["Bytes Received"]
-                    << "\nSent (Packets):\t" <<  output[type][nodes]["Signaling Statistics"]["Packets Sent"]
-                    << "\tReceived (Packets):\t" << output[type][nodes]["Signaling Statistics"]["Packets Received"] 
+                    << "\nSignaling_stats_Sent_(bytes):" <<  output[type][nodes]["Signaling Statistics"]["Bytes Sent"]
+                    << "\nSignaling_stats_Received_(bytes):" << output[type][nodes]["Signaling Statistics"]["Bytes Received"]
+                    << "\nSignaling_stats_Sent_(Packets):" <<  output[type][nodes]["Signaling Statistics"]["Packets Sent"]
+                    << "\nSignaling_stats_Received_(Packets):" << output[type][nodes]["Signaling Statistics"]["Packets Received"] 
                     << "\n";
 
                     std::cout << "\n- QKDApps to KMS stats:"
-                    << "\nSent (bytes):\t" <<  output[type][nodes]["QKDApps-KMS Statistics"]["Bytes Sent"]
-                    << "\tReceived (bytes):\t" << output[type][nodes]["QKDApps-KMS Statistics"]["Bytes Received"]
-                    << "\nSent (Packet):\t" <<  output[type][nodes]["QKDApps-KMS Statistics"]["Packets Sent"]
-                    << "\tReceived (Packet):\t" << output[type][nodes]["QKDApps-KMS Statistics"]["Packets Received"] 
+                    << "\nQKDApps_to_KMS_stats_Sent_(bytes):" <<  output[type][nodes]["QKDApps-KMS Statistics"]["Bytes Sent"]
+                    << "\nQKDApps_to_KMS_stats_Received_(bytes):" << output[type][nodes]["QKDApps-KMS Statistics"]["Bytes Received"]
+                    << "\nQKDApps_to_KMS_stats_Sent_(Packet):" <<  output[type][nodes]["QKDApps-KMS Statistics"]["Packets Sent"]
+                    << "\nQKDApps_to_KMS_stats_Received_(Packet):" << output[type][nodes]["QKDApps-KMS Statistics"]["Packets Received"] 
                     << "\n";
 
                     std::cout << "\n- Key Consumption Statistics:"
-                    << "\nKey-pairs consumed:\t" <<  output[type][nodes]["Key Consumption Statistics"]["Key-pairs consumed"]
-                    << "\nKey-pairs consumed (bits):\t" << output[type][nodes]["Key Consumption Statistics"]["Key-pairs consumed (bits)"] 
-                    << "\nAverage size of consumed key-pairs (bits):\t" << output[type][nodes]["Key Consumption Statistics"]["Average size of consumed key-pairs (bits)"] 
+                    << "\nQKD Key-pairs Provided by KMS:" <<  output[type][nodes]["Key Consumption Statistics"]["QKD Key-pairs Provided by KMS"]
+                    << "\nQKD Key-pairs Provided by KMS (bits):" << output[type][nodes]["Key Consumption Statistics"]["QKD Key-pairs Provided by KMS (bits)"] 
+                    << "\nAverage size of QKD Key-pairs Provided by KMS(bits):" << output[type][nodes]["Key Consumption Statistics"]["Average size of QKD Key-pairs Provided by KMS (bits)"]
+
+                    << "\nPQC Key-pairs Provided by KMS:" <<  output[type][nodes]["Key Consumption Statistics"]["PQC Key-pairs Provided by KMS"]
+                    << "\nPQC Key-pairs Provided by KMS (bits):" << output[type][nodes]["Key Consumption Statistics"]["PQC Key-pairs Provided by KMS (bits)"] 
+                    << "\nAverage size of PQC Key-pairs Provided by KMS(bits):" << output[type][nodes]["Key Consumption Statistics"]["Average size of PQC Key-pairs Provided by KMS (bits)"]
+
+                    << "\nKey-pairs Consumed by App for Encryption/Decryption:" <<  output[type][nodes]["Key Consumption Statistics"]["Key-pairs Consumed by App for Encryption/Decryption"]
+                    << "\nKey-pairs Consumed by App for Encryption/Decryption (bits):" << output[type][nodes]["Key Consumption Statistics"]["Key-pairs Consumed by App for Encryption/Decryption (bits)"] 
+                    << "\nAverage size of Key-pairs Consumed by App for Encryption/Decryption(bits):" << output[type][nodes]["Key Consumption Statistics"]["Average size of Key-pairs Consumed by App for Encryption/Decryption (bits)"]
+
+                    << "\nKey-pairs Consumed by App for Authentication:" <<  output[type][nodes]["Key Consumption Statistics"]["Key-pairs Consumed by App for Authentication"]
+                    << "\nKey-pairs Consumed by App for Authentication (bits):" << output[type][nodes]["Key Consumption Statistics"]["Key-pairs Consumed by App for Authentication (bits)"] 
+                    << "\nAverage size of Key-pairs Consumed by App for Authentication(bits):" << output[type][nodes]["Key Consumption Statistics"]["Average size of Key-pairs Consumed by App for Authentication (bits)"]
+
                     << "\n\n";
                 }
             }
 
         }
     } 
+
+    std::cout << "m_tx_count:" << m_tx_count << "\n";
+    std::cout << "m_tx_bits:" << m_tx_bits << "\n";
+    std::cout << "m_rx_count:" << m_rx_count << "\n";
+    std::cout << "m_rx_bits:" << m_rx_bits << "\n"; 
         
-    std::ofstream statFile; 
-    statFile.open(outputStatsName, std::ofstream::out | std::ofstream::trunc);
-    statFile << output.dump(); 
+    if(!outputStatsName.empty()){
+        std::ofstream statFile; 
+        statFile.open(outputStatsName, std::ofstream::out | std::ofstream::trunc);
+        statFile << output.dump(); 
+    }
 }
 
 std::string
 CalculateAverageDelayBasedOnDistance(uint32_t distanceInMeters){
-
-    return "2ms";
+ 
     //distance in meter
     double distance = distanceInMeters;
     //distance in kilometer
@@ -895,7 +1431,8 @@ CalculateAverageDelayBasedOnDistance(uint32_t distanceInMeters){
     std::string delayString = std::to_string(avgDelay) + "us";
     return delayString;
 }
- 
+
+
 int main (int argc, char *argv[])
 {
     uint64_t execTime;
@@ -1281,13 +1818,10 @@ int main (int argc, char *argv[])
         startTime = inputParams["qkd_links"][a]["startTime"];
         stopTime = inputParams["qkd_links"][a]["stopTime"]; 
  
-        LinkDetails* linkD = new LinkDetails;
-        //linkD->nodes = std::to_string(n.Get(i)->GetId()) + "-" + std::to_string(n.Get(j)->GetId());
+        LinkDetails* linkD = new LinkDetails; 
         linkD->nodes = srcNodeId + "-" + dstNodeId;
         linkD->title = "QKD link: " + linkD->nodes; 
-        linkD->type = 0; 
-        linkD->m_avgSizeOfGeneratedKeys = 0; 
-        linkD->m_avgSizeOfConsumedKeys = 0; 
+        linkD->type = 0;  
         linkD->m_keyRate = ppKeyRate;
         linkD->m_linkDistance = inputParams["qkd_links"][a]["srcDstDistance"];
         linkD->m_startTime = startTime;
@@ -1472,7 +2006,6 @@ int main (int argc, char *argv[])
             m_interfaces.insert( std::make_pair(  linkName ,  interfacesToKMSB) );
         }
 
-
         LinkDetails* linkD = new LinkDetails;
         //linkD->nodes = std::to_string(n.Get(i)->GetId()) + "-" + std::to_string(n.Get(j)->GetId());
         linkD->nodes = srcNodeId + "-" + dstNodeId;
@@ -1486,7 +2019,7 @@ int main (int argc, char *argv[])
         linkD->m_sizeOfKeyBufferForEncryption = keyBufferLengthEncryption;
         linkD->m_sizeOfKeyBufferForAuthentication = keyBufferLengthAuthentication;
         linkD->m_startTime = startTime;
-        linkD->m_stopTime = stopTime;
+        linkD->m_stopTime = stopTime; 
 
         if(systemId == systemID0) {
             std::cout << linkD->title << "\n";
@@ -1541,11 +2074,12 @@ int main (int argc, char *argv[])
             std::cout << "\n";
 
         Ptr<QKDApp004> CA = DynamicCast<QKDApp004> (cryptographicApplications.Get(0));
-        m_nodePairs.insert( std::make_pair( CA->GetId(),  linkD) ); 
         Ptr<QKDApp004> CB = DynamicCast<QKDApp004> (cryptographicApplications.Get(1));
+        linkD->etsi004srcApp = CA;
+        linkD->etsi004dstApp = CB;
+        m_nodePairs.insert( std::make_pair( CA->GetId(),  linkD) ); 
         m_nodePairs.insert( std::make_pair( CB->GetId(),  linkD) );
     }
-
 
     //////////////////////////////////////
     //  QKD APP ETSI 014
@@ -1671,7 +2205,7 @@ int main (int argc, char *argv[])
         linkD->m_trafficRate = appRate;
         linkD->m_numberOfKeysToFetchFromKMS = numberOfKeyToFetchFromKMS; 
         linkD->m_startTime = startTime;
-        linkD->m_stopTime = stopTime;
+        linkD->m_stopTime = stopTime; 
 
         if(systemId == systemID0){
             std::cout << linkD->title << "\n";
@@ -1717,8 +2251,10 @@ int main (int argc, char *argv[])
         cryptographicApplications.Stop (Seconds (stopTime));
    
         Ptr<QKDApp014> CA = DynamicCast<QKDApp014> (cryptographicApplications.Get(0));
-        m_nodePairs.insert( std::make_pair( CA->GetId(),  linkD) ); 
         Ptr<QKDApp014> CB = DynamicCast<QKDApp014> (cryptographicApplications.Get(1));
+        linkD->etsi014srcApp = CA;
+        linkD->etsi014dstApp = CB;
+        m_nodePairs.insert( std::make_pair( CA->GetId(),  linkD) ); 
         m_nodePairs.insert( std::make_pair( CB->GetId(),  linkD) );
     }
 
@@ -1729,39 +2265,52 @@ int main (int argc, char *argv[])
 
     if(systemId == systemID0){
         std::cout << "\n";
-    }
+    } 
 
     //////////////////////////////////////
     ////         STATISTICS
     //////////////////////////////////////
-
-
-    if(numberOfETSI004ApplicationLinks){
+    if(numberOfETSI004ApplicationLinks > 0)
+    {
         Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp004/Tx", MakeCallback(&SentPacket));
         Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp004/Rx", MakeCallback(&ReceivedPacket));
-        Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp004/Mx", MakeCallback(&MissedSendPacketCall)); 
         Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp004/TxSig", MakeCallback(&SentPacketSig));
         Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp004/RxSig", MakeCallback(&ReceivedPacketSig));
         Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp004/TxKMS", MakeCallback(&SentPacketToKMS));
         Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp004/RxKMS", MakeCallback(&ReceivedPacketFromKMS));
+        Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp004/Mx", MakeCallback(&MissedSendPacketCall)); 
+        Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp004/KSIDUpdated", MakeCallback(&Etsi004KSIDGenerated));
+        Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp004/PacketEncrypted", MakeCallback(&KeyConsumedForEncryption));
+        Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp004/PacketDecrypted", MakeCallback(&KeyConsumedForEncryption));
+        Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp004/PacketAuthenticated", MakeCallback(&KeyConsumedForAuthentication));
+        Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp004/PacketDeAuthenticated", MakeCallback(&KeyConsumedForAuthentication));
     }
-
-    if(numberOfETSI014ApplicationLinks){
+    
+    if(numberOfETSI014ApplicationLinks > 0)
+    {
         Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp014/Tx", MakeCallback(&SentPacket));
         Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp014/Rx", MakeCallback(&ReceivedPacket));
-        Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp014/Mx", MakeCallback(&MissedSendPacketCall)); 
+        Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp014/Mx", MakeCallback(&MissedSendPacketCall));
         Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp014/TxSig", MakeCallback(&SentPacketSig));
         Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp014/RxSig", MakeCallback(&ReceivedPacketSig));
         Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp014/TxKMS", MakeCallback(&SentPacketToKMS));
         Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp014/RxKMS", MakeCallback(&ReceivedPacketFromKMS));
+        Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp014/PacketEncrypted", MakeCallback(&KeyConsumedForEncryption));
+        Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp014/PacketDecrypted", MakeCallback(&KeyConsumedForEncryption));
+        Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp014/PacketAuthenticated", MakeCallback(&KeyConsumedForAuthentication));
+        Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp014/PacketDeAuthenticated", MakeCallback(&KeyConsumedForAuthentication));
     }
 
-    //Connect Traces for KM key statistics 
-    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/KeyServed", MakeCallback(&KeyServed));
-    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/KeyConsumedLink", MakeCallback(&KeyConsumedLink));
-    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/QKDKeyGenerated", MakeCallback(&KeyGenerated));
-    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/RelayConsumption", MakeCallback(&RelayKeyTrace));
-    //Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/WasteRelay", MakeCallback(&WasteKeyTrace));
+    //Connect Traces for KM key statistics
+    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/KeyPrepared", MakeCallback(&KeyPrepared));
+    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/KeyDelivered", MakeCallback(&KeyDelivered));
+    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/KeyGenerated", MakeCallback(&KeyGenerated));
+    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/KeyGeneratedPQC", MakeCallback(&KeyGeneratedPQC));
+    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/KeyRelayed", MakeCallback(&KeyRelayed));
+    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/KeyWasted", MakeCallback(&KeyWasted));
+    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/TxKMSs", MakeCallback(&TxKMSs));
+    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/RxKMSs", MakeCallback(&RxKMSs));
+    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/KSIDUpdated", MakeCallback(&Etsi004KSIDGenerated));
     
     //@toDo: disable after debuging
     if(trace){

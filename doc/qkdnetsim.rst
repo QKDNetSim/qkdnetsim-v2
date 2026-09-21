@@ -376,7 +376,7 @@ You can plot and analyze the output graphs using gnuplot:
 
  $ gnuplot *.plt
 
-One can notice there are graphs for QBuffers, SBuffers and one total graph. In case of ETSI014, QKDNetSim generates two SBuffers (type LOCAL) per KMS connection for encryption and decryption purposes. More details about those buffers can be found in our paper (https://doi.org/doi.org/10.1364/JOCN.503356). In general, keys are stored in QBuffers, and moved to SBuffers. The graphs show higher fluctuations in SBuffers since those buffers are intensively used for ETSI014 traffic.
+One can notice there are graphs for QBuffers, SBuffers and one total graph. In case of ETSI014, QKDNetSim generates two SBuffers (type LOCAL) per KMS connection for encryption and decryption purposes. More details about those buffers can be found in our paper (https://doi.org/doi.org/10.1364/JOCN.503356). In general, keys are stored in QBuffers, and moved to SBuffers. The graphs show higher fluctuations in SBuffers since those buffers are intensively used for ETSI014 traffic. Please note that graphs might look different depending on the version of QKDNetSim used.
 
 .. QKD Graph - QBuffer:
  
@@ -769,6 +769,7 @@ Cite
 * .. Dervisevic, E., Tankovic, A., Fazel, E., Kompella, R., Fazio, P., Voznak, M. and Mehic, M., 2025. Quantum Key Distribution Networks – Key Management: A Survey. ACM Computing Surveys, 57(10), pp. 1–36, doi: https://www.doi.org/10.1145/3730575
 * .. Mehic, M., Dervisevic, E., Burdiak, P., Lipovac, V., Fazio, P. and Voznak, M., 2024. Emulation of quantum key distribution networks. IEEE Network, 39(1), pp.116-123. doi: https://www.doi.org/10.1109/MNET.2024.3398404
 * .. Mehic, M., Dervisevic, E., Fazio, P. and Voznak, M., 2025. Virtual Quantum Key Distribution Network Ecosystem: The National Czech QKD Network. IEEE Network., 39(3), pp.173-179. doi: https://www.doi.org/10.1109/MNET.2025.3540705
+* .. Mehic, M., Rass, S., Jakovlev, S., Niemiec, M., Fazio, P. and Voznak, M., 2026. On Mixing of Quantum Key Distribution and Post-Quantum Cryptographic Keys: Min-Entropy Bounds, Provisioning Policies, and Network-Oriented Trade-offs. IEEE Journal on Selected Areas in Communications. doi: https://doi.org/10.1109/JSAC.2026.3722598
 
 References
 ----------

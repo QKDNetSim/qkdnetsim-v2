@@ -44,8 +44,7 @@ namespace ns3 {
         uint32_t lifetime
     ) : QKDKey(id, value) {
         m_type = type;
-        m_lifetime = lifetime;
-
+        m_lifetime = lifetime; 
     }
 
     AppKey::AppKey(

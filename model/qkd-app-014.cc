@@ -97,26 +97,26 @@ QKDApp014::GetTypeId()
     .AddTraceSource("StateTransition",
                      "Trace fired upon every QKDApp014 state transition.",
                      MakeTraceSourceAccessor(&QKDApp014::m_stateTransitionTrace),
-                     "ns3::Application::StateTransitionCallback")
-    .AddTraceSource("PacketEncrypted",
-                    "The change trance for currenly ecrypted packet",
-                     MakeTraceSourceAccessor(&QKDApp014::m_encryptionTrace),
-                     "ns3::QKDCrypto::PacketEncrypted")
-    .AddTraceSource("PacketDecrypted",
-                    "The change trance for currenly decrypted packet",
-                     MakeTraceSourceAccessor(&QKDApp014::m_decryptionTrace),
-                     "ns3::QKDCrypto::PacketDecrypted")
-    .AddTraceSource("PacketAuthenticated",
-                    "The change trance for currenly authenticated packet",
-                     MakeTraceSourceAccessor(&QKDApp014::m_authenticationTrace),
-                     "ns3::QKDCrypto::PacketAuthenticated")
-    .AddTraceSource("PacketDeAuthenticated",
-                    "The change trance for currenly deauthenticated packet",
-                     MakeTraceSourceAccessor(&QKDApp014::m_deauthenticationTrace),
-                     "ns3::QKDCrypto::PacketDeAuthenticated")
+                     "ns3::Application::StateTransitionCallback") 
     .AddTraceSource("Mx", "Missed send packet call",
                      MakeTraceSourceAccessor(&QKDApp014::m_mxTrace),
                      "ns3::Packet::TracedCallback")
+    .AddTraceSource("PacketEncrypted",
+                    "The change trance for currenly ecrypted packet",
+                     MakeTraceSourceAccessor(&QKDApp014::m_encryptionTrace),
+                     "ns3::QKDApp014::PacketEncrypted")
+    .AddTraceSource("PacketDecrypted",
+                    "The change trance for currenly decrypted packet",
+                     MakeTraceSourceAccessor(&QKDApp014::m_decryptionTrace),
+                     "ns3::QKDApp014::PacketDecrypted")
+    .AddTraceSource("PacketAuthenticated",
+                    "The change trance for currenly authenticated packet",
+                     MakeTraceSourceAccessor(&QKDApp014::m_authenticationTrace),
+                     "ns3::QKDApp014::PacketAuthenticated")
+    .AddTraceSource("PacketDeAuthenticated",
+                    "The change trance for currenly deauthenticated packet",
+                     MakeTraceSourceAccessor(&QKDApp014::m_deauthenticationTrace),
+                     "ns3::QKDApp014::PacketDeAuthenticated")
   ;
 
   return tid;
@@ -724,7 +724,8 @@ QKDApp014::QAppPacketReceived(const Ptr<Packet> &p, const Address &from, Ptr<Soc
     buffer->PeekHeader(header);
     NS_ABORT_IF(header.GetLength() == 0);
 
-    while(buffer->GetSize() >= header.GetLength()){
+    while(buffer->GetSize() >= header.GetLength())
+    {
       NS_LOG_DEBUG("Removing packet of size " << header.GetLength() << " from buffer of size " << buffer->GetSize());
       Ptr<Packet> completePacket = buffer->CreateFragment(0, static_cast<uint32_t>(header.GetLength()));
       buffer->RemoveAtStart(static_cast<uint32_t>(header.GetLength()));
@@ -848,18 +849,24 @@ QKDApp014::GetLocalKey(std::string type, std::string keyId)
 {
   NS_LOG_FUNCTION(this << m_master << type << keyId);
   Ptr<AppKey> localKey;
-  if(m_master){ //master
-    if(type == "encryption"){ //Get encryption key
+
+  //master  
+  if(m_master)
+  { 
+    //Get encryption key
+    if(type == "encryption")
+    { 
       auto it = m_encStore.begin();
-      if(it != m_encStore.end()){
+      if(it != m_encStore.end())
+      {
         localKey = it->second;
         NS_LOG_FUNCTION(this << localKey->GetLifetime());
-        if( localKey->GetLifetime() < 2*m_size ){
+        if(localKey->GetLifetime() < 2*m_size )
+        {
           NS_LOG_FUNCTION(this << "lifetime expired! key " << localKey->GetId() << " removed");
           m_encStore.erase(it);
         }else
           it->second->UseLifetime(m_size);
-
       }else
         NS_LOG_DEBUG(this << m_master << type << "store empty");
 
@@ -869,34 +876,34 @@ QKDApp014::GetLocalKey(std::string type, std::string keyId)
         localKey = it->second;
         NS_LOG_FUNCTION(this << type << localKey->GetId());
         m_authStore.erase(it);
-        NS_LOG_FUNCTION(this << "key removed" << localKey->GetId());
+        NS_LOG_FUNCTION(this << "876: auth key removed" << localKey->GetId() << localKey->GetSizeInBits());
       }else
         NS_LOG_DEBUG(this << m_master << "store empty" << type);
-
     }
 
   }else{ //slave
     auto it = m_commonStore.find(keyId);
-    if(it != m_commonStore.end()){
+    if(it != m_commonStore.end())
+    {
       localKey = it->second;
-      if(localKey->GetType() == AppKey::ENCRYPTION){
-        if( localKey->GetLifetime() < 2*m_size ){
+      if(localKey->GetType() == AppKey::ENCRYPTION)
+      {
+        if(localKey->GetLifetime() < 2*m_size )
+        {
           NS_LOG_FUNCTION(this << "lifetime expired! key " << localKey->GetId() << " removed");
           m_commonStore.erase(it);
         }else
           it->second->UseLifetime(m_size);
 
       }else{ //Authenticaiton key
-        NS_LOG_FUNCTION(this << "key " << localKey->GetId() << " removed");
+        NS_LOG_FUNCTION(this << "894: auth key removed" << localKey->GetId() << localKey->GetSizeInBits());
         m_commonStore.erase(it);
-
       }
-
     }else
       NS_LOG_DEBUG(this << m_master << "store empty" << type);
-
   }
 
+  NS_LOG_FUNCTION(this << "908: returning key" << localKey->GetId() << localKey->GetSizeInBits());
   return localKey;
 }
 
@@ -939,11 +946,11 @@ QKDApp014::CheckAppState()
  * ********************************************************************************************
  */
 void
-QKDApp014::PushHttpKmsRequest(std::string input)
+QKDApp014::PushHttpKmsRequest(std::string input, std::string uri)
 {
-  NS_LOG_FUNCTION(this);
+  NS_LOG_FUNCTION(this << input << uri);
   if(input.empty()) NS_LOG_ERROR(this << "empty input");
-  m_kmsHttpReqQueue.push_back(input);
+  m_kmsHttpReqQueue.insert( std::make_pair(uri, input));
 }
 
 void
@@ -955,14 +962,20 @@ QKDApp014::PushHttpAppRequest(std::vector<std::string> keyIds)
 }
 
 std::string
-QKDApp014::PopHttpKmsRequest()
+QKDApp014::PopHttpKmsRequest(std::string uri)
 {
-  NS_LOG_FUNCTION(this);
+  NS_LOG_FUNCTION(this << uri);
   std::string output;
-  if(m_kmsHttpReqQueue.empty())   NS_LOG_ERROR(this << "request queue is empty");
-  auto it = m_kmsHttpReqQueue.begin();
-  output = *it;
-  m_kmsHttpReqQueue.erase(it);
+  if(m_kmsHttpReqQueue.empty())   
+    NS_LOG_ERROR(this << "request queue is empty");
+
+  auto it = m_kmsHttpReqQueue.find(uri);
+  if(it == m_kmsHttpReqQueue.end())
+    NS_LOG_ERROR(this << "unknown key");
+  else{
+    output = it->second;
+    m_kmsHttpReqQueue.erase(it);
+  }
 
   return output;
 }
@@ -1049,49 +1062,92 @@ QKDApp014::SendDataPacket()
     NS_LOG_FUNCTION(this << "enc/auth" << encrypted << authenticated);
 
     //Obtain secret keys!
-    Ptr<AppKey> encKey;
-    Ptr<AppKey> authKey;
+    Ptr<AppKey> encKey = nullptr;
+    Ptr<QKDKey> authKey = nullptr;
     std::string encKeyDecoded;
     std::string authKeyDecoded;
     std::string confidentialMsg {GetPacketContent()};
     std::string encryptedMsg {confidentialMsg};
     std::string authTag;
     
-    if(encrypted){
+    if(encrypted)
+    {
       encKey = GetLocalKey("encryption");
-      encKeyDecoded = m_encryptor->Base64Decode(encKey->GetKeyString());
-      if(m_useCrypto){
+      NS_ASSERT(encKey);
+      encKeyDecoded = encKey->GetKeyString();
+
+      if(m_useCrypto)
+      {
         encryptedMsg = m_encryptor->EncryptMsg(confidentialMsg, encKeyDecoded);
         NS_LOG_FUNCTION(this << "\n\tencryption key" << encKey->GetId() << encKeyDecoded
           << "\n\tencrypted message(Base64 print)" << m_encryptor->Base64Encode(encryptedMsg));
-
       }else{
         encryptedMsg = confidentialMsg;
         NS_LOG_FUNCTION(this << "\n\tencryption key" << encKey->GetId() << encKeyDecoded);
-
       }
     }
 
-    if(GetAuthenticationKeySize()){
-      authKey = GetLocalKey("authentication");
-      authKeyDecoded = m_encryptor->Base64Decode(authKey->GetKeyString());
-      if(m_useCrypto){
-        authTag = m_encryptor->Authenticate(encryptedMsg, authKeyDecoded);
-        NS_LOG_FUNCTION(this << "\n\tauthentication key" << authKey->GetId() << authKeyDecoded
-          << "\n\tauthentication tag" << authTag);
+    switch (m_authenticationType)
+    {
+        case QKDEncryptor::UNAUTHENTICATED:
+            break;
+        case QKDEncryptor::QKDCRYPTO_AUTH_VMAC:
+        {
+            authKey = GetLocalKey("authentication");
+            NS_ASSERT(authKey);
+            authKeyDecoded = authKey->GetKeyString();
+            NS_LOG_FUNCTION(this << "Authentication key ID: " << authKey->GetId() << " size: " << authKeyDecoded.size());
 
-      }else{
-        authTag = GetPacketContent(32);
-        NS_LOG_FUNCTION(this << "\n\tauthentication key" << authKey->GetId() << authKeyDecoded);
-
-      }
+            if (m_useCrypto)
+              authTag = m_encryptor->Authenticate(encryptedMsg,authKeyDecoded);
+            else
+              authTag = std::string(32, '\0');
+            break;
+        }
+        case QKDEncryptor::QKDCRYPTO_AUTH_MD5:
+        case QKDEncryptor::QKDCRYPTO_AUTH_SHA1:
+        {
+            // MD5/SHA1 do not require an authentication key
+            if (m_useCrypto)
+                authTag = m_encryptor->Authenticate(encryptedMsg,"");
+            else
+              authTag = std::string(32, '\0');
+            break;
+        }
+        default:
+            NS_LOG_WARN("Unknown authentication type: " << m_authenticationType);
+            break;
     }
 
     //Create packet with protected/unprotected data
     std::string msg {encryptedMsg};
     Ptr<Packet> packet = Create<Packet>((uint8_t*) msg.c_str(), msg.length() );
     NS_ASSERT(packet);
-    m_authenticationTrace(packet, authTag);
+
+    if(encKey)
+      m_encryptionTrace(GetId(), encKey->GetId(), encKey->GetSizeInBits(), confidentialMsg, encryptedMsg, packet);
+
+    if (!authTag.empty())
+    { 
+      NS_LOG_FUNCTION(this << "1132: Hit auth trace!" << authKey->GetSizeInBits());
+      if (authKey)
+        m_authenticationTrace(
+            GetId(),
+            authKey->GetId(),
+            authKey->GetSizeInBits(),
+            encryptedMsg,
+            authTag,
+            packet);
+      else
+        // MD5/SHA1 have no QKD authentication key
+        m_authenticationTrace(
+            GetId(),
+            "",
+            0,
+            encryptedMsg,
+            authTag,
+            packet);
+    }
 
     //Add qkd header!
     QKDAppHeader qHeader;
@@ -1123,7 +1179,6 @@ QKDApp014::SendDataPacket()
     if(!m_scheduleManageStores.IsPending())
         ScheduleAction(Time(m_waitInsufficient), "ManageStores"); 
   }
-
 }
 
 void
@@ -1136,46 +1191,83 @@ QKDApp014::ProcessDataPacket(QKDAppHeader header, Ptr<Packet> packet, Ptr<Socket
   std::string payload = std::string((char*)buffer, packet->GetSize());
   delete[] buffer;
 
-  NS_LOG_FUNCTION(this << "\ndata received\n" << m_encryptor->Base64Encode(payload));
   SwitchAppState(DECRYPT_DATA);
   SetCryptoSettings(header.GetEncrypted(), header.GetAuthenticated(), m_authTagSize);
   std::string decryptedMsg;
+  std::string authTag = header.GetAuthTag();
   m_size = payload.length();
 
-  if(GetAuthenticationKeySize()){ //Perform authentication first
-    Ptr<AppKey> key {GetLocalKey("authentication", ReadKeyIdField(header.GetAuthenticationKeyId()))};
-    if(m_useCrypto){
-      std::string decodedKey {m_encryptor->Base64Decode(key->GetKeyString())}; //Decode key
-      if(m_encryptor->CheckAuthentication(payload, header.GetAuthTag(), decodedKey)) //Check authTag
+  // Perform authentication only if the packet is authenticated
+  if (header.GetAuthenticated())
+  {
+      Ptr<AppKey> authKey = nullptr;
+      std::string authKeyString;
+      bool authenticationOk = true;
+
+      // Authentication with QKD key (e.g. VMAC)
+      if (GetAuthenticationKeySize())
+      {
+
+        std::string authKeyId = ReadKeyIdField(header.GetAuthenticationKeyId());
+        authKey = GetLocalKey("authentication", authKeyId);
+        NS_ASSERT(authKey);
+
+        if (m_useCrypto)
+        {
+            authKeyString = authKey->GetKeyString();
+            NS_LOG_FUNCTION(this
+                            << "1216: Authentication key: " << authKey->GetId()
+                            << " size: " << authKeyString.size()
+                            );
+            authenticationOk = m_encryptor->CheckAuthentication(payload, authTag, authKeyString);
+        }
+        m_deauthenticationTrace(
+            GetId(),
+            authKeyId,
+            authKey->GetSizeInBits(),
+            payload,
+            authTag,
+            packet);
+      }
+      // Authentication without QKD key (e.g. MD5/SHA1)
+      else
+      {
+        if (m_useCrypto)
+            authenticationOk = m_encryptor->CheckAuthentication(payload,authTag,"");
+        
+        // Classical authentication does not require QKD key
+        m_deauthenticationTrace(
+          GetId(),
+          "",
+          0,
+          payload,
+          authTag,
+          packet
+        );
+      }
+
+      if (authenticationOk)
         NS_LOG_FUNCTION(this << "authentication successful");
       else
         NS_LOG_WARN(this << "authentication failed");
-
-    }else //We assume packet is authenticated
-        NS_LOG_FUNCTION(this << "authentication successful");
-
-  }else if(header.GetAuthenticated()){
-    if(m_useCrypto){
-      if(m_encryptor->CheckAuthentication(payload, header.GetAuthTag(), ""))
-        NS_LOG_FUNCTION(this << "authentication successful");
-      else
-        NS_LOG_WARN(this << "authentication failed");
-
-    }else//We assume packet is authenticated
-      NS_LOG_FUNCTION(this << "authentication successful");
-
   }
 
-  if(header.GetEncrypted()){ //Perform decryption
-    Ptr<AppKey> key {GetLocalKey("encryption", ReadKeyIdField(header.GetEncryptionKeyId()))};
-    if(m_useCrypto){
-      std::string decodedKey {m_encryptor->Base64Decode(key->GetKeyString())}; //Decode key
-      NS_LOG_FUNCTION(this << "\n\tdecryption key" << decodedKey);
-      decryptedMsg = m_encryptor->DecryptMsg(payload, decodedKey);
-      NS_LOG_FUNCTION(this << "\n\tdecrypted message" << decryptedMsg);
-    }else
-      NS_LOG_FUNCTION(this << "packet decrypted");
 
+  //Perform decryption
+  if(header.GetEncrypted())
+  { 
+    Ptr<AppKey> key {GetLocalKey("encryption", ReadKeyIdField(header.GetEncryptionKeyId()))};
+    if(m_useCrypto)
+    {
+      std::string decodedKey {key->GetKeyString()}; //Decode key
+      NS_LOG_FUNCTION(this << "\n\tdecryption key" << decodedKey);
+ 
+      decryptedMsg = m_encryptor->DecryptMsg(m_encryptor->Base64Decode(payload), decodedKey);
+      NS_LOG_FUNCTION(this << "\n\tdecrypted message" << decryptedMsg);
+    }else{
+      NS_LOG_FUNCTION(this << "packet decrypted");
+    }
+    m_decryptionTrace(GetId(), key->GetId(), key->GetSizeInBits(), decryptedMsg, payload, packet);
   }else
     NS_LOG_FUNCTION(this << "Received message" << payload);
 
@@ -1245,9 +1337,10 @@ QKDApp014::GetKeysFromKMS(std::string keyType)
     useGet = false;
 
   HTTPMessage httpMessage;
-  std::string headerUri {"http://" + IpToString(GetKmsIp()) + "/api/v1/keys/" + m_dstId + "/enc_keys"};
-  if(useGet){ //Update header URI
-    headerUri += "/number/" + std::to_string(number) + "/size/" + std::to_string(size);
+  std::string headerUri {"http://" + IpToString(GetKmsIp()) + "/api/v1/keys/" + m_dstId + "/enc_keys" };
+  if(useGet)
+  { //Update header URI
+    headerUri += "/number/" + std::to_string(number) + "/size/" + std::to_string(size) + "?r=" + GetPacketContent(32);
     httpMessage.CreateRequest(headerUri, "GET");
     httpMessage.SetHeader("User-Agent", "QKDApp014_" + GetId());
 
@@ -1267,7 +1360,7 @@ QKDApp014::GetKeysFromKMS(std::string keyType)
     << " uri " << headerUri
   );
 
-  PushHttpKmsRequest(keyType);
+  PushHttpKmsRequest(keyType, headerUri);
   m_txKmsTrace(GetId(), packet);
   m_socketToKMS->Send(packet);
 }
@@ -1301,7 +1394,7 @@ QKDApp014::GetKeyWithKeyIDs(std::string keyIds)
 void
 QKDApp014::ProcessResponseFromKMS(HTTPMessage& header, Ptr<Packet> packet, Ptr<Socket> socket)
 {
-  NS_LOG_FUNCTION(this << header.GetRequestUri() << header.GetStatus());
+  NS_LOG_FUNCTION(this << header.GetRequestUri() << header.GetStatus() << header.GetMessageBodyString());
 
   std::string reqMethod = ReadUri(header.GetRequestUri())[5]; //Get method from request URI field!
   nlohmann::json responseBody;
@@ -1320,16 +1413,38 @@ QKDApp014::ProcessResponseFromKMS(HTTPMessage& header, Ptr<Packet> packet, Ptr<S
 
 
   /**       enc_keys          **/
-  }else if(reqMethod == "enc_keys"){
-    if(header.GetStatus() == HTTPMessage::Ok){
-      std::string keyType {PopHttpKmsRequest()};
+  }else if(reqMethod == "enc_keys")
+  {
+    if(header.GetStatus() == HTTPMessage::Ok)
+    {
+      std::string keyType {PopHttpKmsRequest("http://" + header.GetRequestUri())};
       std::vector<std::string> keyIds; //Obtained keyIds
-      for(nlohmann::json::iterator it = responseBody["keys"].begin(); it != responseBody["keys"].end(); ++it){
-        Ptr<AppKey> key = CreateObject<AppKey>( std::string{(it.value())["key_ID"]}, std::string {(it.value())["key"]}, AppKey::ENCRYPTION, m_size );
+      std::string keyTempValue;
+      std::string keyTempValueDecoded;
+      for(nlohmann::json::iterator it = responseBody["keys"].begin(); it != responseBody["keys"].end(); ++it)
+      {
+        keyTempValue = std::string{(it.value())["key"]};
+        keyTempValueDecoded = m_encryptor->Base64Decode(keyTempValue); 
+        NS_LOG_FUNCTION (this << "1356: " << keyTempValue << " " << keyTempValue.size() << "\t keyTempValueDecoded:" << keyTempValueDecoded << " " << keyTempValueDecoded.size() );
+
+        Ptr<AppKey> key = CreateObject<AppKey>( 
+          std::string{(it.value())["key_ID"]}, 
+          keyTempValueDecoded, 
+          AppKey::ENCRYPTION, 
+          m_size 
+        );
+
         if(keyType == "encryption" && m_encryptionType == QKDEncryptor::QKDCRYPTO_AES)
           key->SetLifetime(m_aesLifetime);
-        else if(keyType == "authentication")
+        
+        if(keyType == "authentication"){
           key->SetType(AppKey::AUTHENTICATION);
+          NS_LOG_FUNCTION(this << "Storing key " << key->GetId() << " in common_store as AUTH!");
+        }else{
+          key->SetType(AppKey::ENCRYPTION);
+          NS_LOG_FUNCTION(this << "Storing key " << key->GetId() << " in common_store as ENCRYPTION!");
+        }
+
 
         m_commonStore.insert(std::make_pair(key->GetId(), key)); //Add keys to temporary key store
         keyIds.push_back(key->GetId());
@@ -1349,15 +1464,29 @@ QKDApp014::ProcessResponseFromKMS(HTTPMessage& header, Ptr<Packet> packet, Ptr<S
       NS_FATAL_ERROR(this << "response data format error" << responseBody.dump());
   }
   /**       dec_keys          **/
-  }else if(reqMethod == "dec_keys"){
-    if(header.GetStatus() == HTTPMessage::HttpStatus::Ok){
+  }else if(reqMethod == "dec_keys")
+  {
+    if(header.GetStatus() == HTTPMessage::HttpStatus::Ok)
+    {
       //Replica application directly stores the keys in application key buffer!
+      std::string keyTempValue;
+      std::string keyTempValueDecoded;
       for(nlohmann::json::iterator it = responseBody["keys"].begin(); it != responseBody["keys"].end(); ++it)
+      {
+        keyTempValue = std::string{(it.value())["key"]};
+        keyTempValueDecoded = m_encryptor->Base64Decode(keyTempValue); 
+        NS_LOG_FUNCTION (this << "1395: " << keyTempValue << " " << keyTempValue.size() << "\t keyTempValueDecoded:" << keyTempValueDecoded << " " << keyTempValueDecoded.size() );
         m_commonStore.insert(
           std::make_pair((it.value())["key_ID"],
-                          CreateObject<AppKey>( std::string{(it.value())["key_ID"]}, std::string{(it.value())["key"]}, AppKey::ENCRYPTION, m_aesLifetime )
+                          CreateObject<AppKey>( 
+                            std::string{(it.value())["key_ID"]}, 
+                            keyTempValueDecoded,
+                            AppKey::ENCRYPTION, 
+                            m_aesLifetime
+                          )
           )
         );
+      }
     }else
       NS_LOG_ERROR(this << "error");
 
@@ -1382,17 +1511,21 @@ QKDApp014::ProcessSignalingPacketFromApp(HTTPMessage& header, Ptr<Packet> packet
     //Sender App014 moves keys to outbound key store
     if(header.GetStatus() == HTTPMessage::Ok)
     {
-      for(auto const& el: keyIds){
+      for(auto const& el: keyIds)
+      {
         auto it = m_commonStore.find(el);
         if(it == m_commonStore.end())
           NS_LOG_ERROR(this << "unknown key");
         else{
-          if(it->second->GetType() == AppKey::ENCRYPTION){
+          if(it->second->GetType() == AppKey::ENCRYPTION)
+          {
             m_encStore.insert( std::make_pair(it->second->GetId(), it->second) );
-            NS_LOG_DEBUG(this << "moved to encryption store\t" << it->second->GetId());
+            NS_LOG_DEBUG(this << " moved to encryption store\t" << it->second->GetId() << "\t" << it->second->GetSizeInBits());
+
           }else if(it->second->GetType() == AppKey::AUTHENTICATION){
             m_authStore.insert( std::make_pair(it->second->GetId(), it->second) );
-            NS_LOG_DEBUG(this << "moved to authentication store\t" << it->second->GetId());
+            NS_LOG_DEBUG(this << " moved to authentication store\t" << it->second->GetId() << "\t" << it->second->GetSizeInBits());
+
           }else
             NS_LOG_ERROR(this << "unknown key type");
 
@@ -1736,7 +1869,7 @@ QKDApp014::GetAuthenticationKeySize()
       return 0;
       break;
     case QKDEncryptor::QKDCRYPTO_AUTH_VMAC:
-      return CryptoPP::AES::BLOCKSIZE * 8; //In bits //Before: m_authTagSize - 32B?
+      return m_authTagSize; //In bits
       break;
     case QKDEncryptor::QKDCRYPTO_AUTH_MD5:
       return 0; //NoKey

@@ -1017,7 +1017,8 @@ QKDPostprocessingApplication::PacketReceived(const Ptr<Packet> &p, const Address
           "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
           "abcdefghijklmnopqrstuvwxyz";
       //srand( m_internalID );
-      for(int i = 0; i < len; ++i){
+      for(int i = 0; i < len; ++i)
+      {
           tmp_s += alphanum[rand() %(sizeof(alphanum) - 1)];
       }
       return tmp_s;

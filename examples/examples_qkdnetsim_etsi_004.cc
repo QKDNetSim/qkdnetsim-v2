@@ -1,5 +1,5 @@
 /*
- * Copyright(c) 2025 University of Sarajevo, Faculty of Electrical Engineering, 
+ * Copyright(c) 2026 University of Sarajevo, Faculty of Electrical Engineering, 
  * Department of Telecommunications, Zmaja od Bosne bb, 71000 Sarajevo, Bosnia and Herzegovina
  * www.tk.etf.unsa.ba
  *
@@ -41,14 +41,10 @@
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE ("QKD_ETSI004");
+NS_LOG_COMPONENT_DEFINE ("QKDNETSIM_EXAMPLE_ETSI004");
 
-uint32_t showKeyAdded = 0;
-uint32_t showKeyServed = 0;
-
- 
 std::map<std::string, std::map<std::string, uint32_t> > m_generatedKeys;
-std::map<std::string, std::map<std::string, uint32_t> > m_servedKeys;
+std::map<std::string, std::map<std::string, uint32_t> > m_deliveredKeys;
 
 std::map<std::string, std::pair<uint32_t, uint32_t> > m_dataAppSent;
 std::map<std::string, std::pair<uint32_t, uint32_t> > m_dataAppReveived;
@@ -63,11 +59,20 @@ KeyGenerated(std::string context, const std::string& appId, const std::string& k
 {   
     m_generatedKeys[appId][keyId] += amountInBits;    
 }
-
+ 
 void
-KeyServed (std::string context, const std::string& appId, const std::string& keyId, const uint32_t& amountInBits)
-{   
-    m_servedKeys[appId][keyId] += amountInBits;
+KeyDelivered(
+    std::string context, 
+    const std::string& ksid, 
+    const std::string& srcSaeId, 
+    const std::string& dstSaeId, 
+    const uint32_t& srcNodeId, 
+    const uint32_t& dstNodeId, 
+    const std::string& keyId, 
+    const uint32_t& amountInBits, 
+    const std::string& type
+){   
+    m_deliveredKeys[ksid][keyId] += amountInBits;
 }
 
 void
@@ -190,10 +195,10 @@ Ratio(){
     }
 
     std::cout << "\n\nSERVICE STATS:\n";
-    for(auto const &el: m_servedKeys){
-        std::cout << "\n\tApplication ID:\t" << el.first;
+    for(auto const &el: m_deliveredKeys){
+        std::cout << "\n\tApplication ID (ksid):\t" << el.first;
         for(auto const &el1: el.second)   
-            std::cout << "\n\t\tKey ID:\t" << el1.first << "\t Size: " << el1.second << " (bits)";
+            std::cout << "\n\t\tDelivered Key ID:\t" << el1.first << "\t Size: " << el1.second << " (bits)";
         std::cout << "\n";
     }
 }
@@ -434,8 +439,8 @@ int main (int argc, char *argv[])
     Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDApp004/RxKMS", MakeCallback(&ReceivedPacketFromKMS));
 
     //Connect Traces for KM key statistics
-    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/KeyServed", MakeCallback(&KeyServed));
-    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/QKDKeyGenerated", MakeCallback(&KeyGenerated));
+    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/KeyDelivered", MakeCallback(&KeyDelivered));
+    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/KeyGenerated", MakeCallback(&KeyGenerated));
 
     if(trace){
         //if we need we can create pcap files

@@ -193,7 +193,7 @@ QKDEncryptor::DecryptMsg(std::string input, std::string key)
 std::string
 QKDEncryptor::Authenticate(std::string& inputString, std::string key)
 {
-    NS_LOG_FUNCTION(this << inputString.length() << key.length());
+    NS_LOG_FUNCTION(this << inputString.size() << key.size() << inputString << "key:" << key);
     switch(m_authenticationType)
     {
         case UNAUTHENTICATED:
@@ -207,6 +207,9 @@ QKDEncryptor::Authenticate(std::string& inputString, std::string key)
         case QKDCRYPTO_AUTH_SHA1:
             return SHA1(inputString);
             break;
+        default:
+            NS_LOG_WARN("Unknown authentication type");
+            return "";
     }
     std::string temp;
     return temp;
@@ -215,9 +218,10 @@ QKDEncryptor::Authenticate(std::string& inputString, std::string key)
 bool
 QKDEncryptor::CheckAuthentication(std::string payload, std::string authTag, std::string key)
 {
+    NS_LOG_FUNCTION(this << payload << authTag << key);
     //@toDo: authentication tag is different even though key and received tag are good, and payload seems to be correct!
     std::string genAuthTag = Authenticate(payload, key);
-    NS_LOG_FUNCTION( this << key << authTag << genAuthTag );
+    NS_LOG_FUNCTION( this << "224:" << key << authTag << genAuthTag );
     return (genAuthTag == authTag);
 }
 

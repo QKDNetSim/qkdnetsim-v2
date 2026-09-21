@@ -653,19 +653,20 @@ private:
     uint32_t    m_authentication;
     uint32_t    m_authenticationTagLengthInBits; //!< length of the authentication tag in bits(32 by default)
     uint32_t    m_aesLifetime; //in packets!
-    TracedCallback<Ptr<Packet> > m_encryptionTrace; //!< trace callback for encryption
-    TracedCallback<Ptr<Packet> > m_decryptionTrace; //!< trace callback for decryption
-    TracedCallback<Ptr<Packet>, std::string > m_authenticationTrace; //!< trace callback for authentication
-    TracedCallback<Ptr<Packet>, std::string > m_deauthenticationTrace; //!< trace callback for authentication check
-    TracedCallback<const std::string&, const std::string&, const std::string&, const uint32_t&> m_ksidGenerated;
-    QKDEncryptor::EncryptionType m_encryptionType;
-    QKDEncryptor::AuthenticationType m_authenticationType;
+
     Ptr<QKDEncryptor> m_encryptor;
     uint32_t    m_keyBufferLengthEncryption;
     uint32_t    m_keyBufferLengthAuthentication;
-
+    QKDEncryptor::EncryptionType m_encryptionType;
+    QKDEncryptor::AuthenticationType m_authenticationType;
+        
+    TracedCallback<const std::string&, const std::string&, const uint32_t&, const std::string&, const std::string&, Ptr<Packet> > m_encryptionTrace; //!< trace callback for encryption
+    TracedCallback<const std::string&, const std::string&, const uint32_t&, const std::string&, const std::string&, Ptr<Packet> > m_decryptionTrace; //!< trace callback for decryption 
+    TracedCallback<const std::string&, const std::string&, const uint32_t&,  const std::string&, const std::string&, Ptr<Packet> > m_authenticationTrace; //!< trace callback for authentication
+    TracedCallback<const std::string&, const std::string&, const uint32_t&,  const std::string&, const std::string&, Ptr<Packet> > m_deauthenticationTrace; //!< trace callback for authentication check
+    TracedCallback<const std::string&, const std::string&, const std::string&, const uint32_t&> m_ksidGenerated;
+    
     State m_state; //Application state!
-
     std::vector<KMSPacket > m_queue_kms;
 
     std::unordered_map<Address, Ptr<Packet>, AddressHash> m_buffer_kms; //!< Buffer for received packets(fragmentation)
@@ -673,7 +674,6 @@ private:
     std::unordered_map<Address, Ptr<Packet>, AddressHash> m_buffer_qkdapp; //!< Buffer for received packets(fragmentation)
 
     std::multimap<std::string, std::string> m_transitionMatrix; //!< transition map of protocol states
-
 };
 
 

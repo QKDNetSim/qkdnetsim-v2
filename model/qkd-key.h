@@ -25,6 +25,8 @@
 #include "ns3/nstime.h"
 #include "ns3/traced-callback.h"
 #include "ns3/deprecated.h"
+#include "ns3/random-variable-stream.h"
+#include "ns3/uuid.h"
 #include <string>
 #include <iomanip>
 #include <vector>
@@ -228,6 +230,7 @@ class QKDKey : public Object
         Time                m_timestamp; //<! QKDKey generation timestamp
         QKDKeyState_e       m_state; //!< state of the key
         std::string         m_moduleId; //!< id of QKD module that generated key
+        Ptr<UniformRandomVariable> m_randomVariable;
 
     };
 

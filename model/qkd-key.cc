@@ -64,8 +64,8 @@ namespace ns3 {
       NS_LOG_FUNCTION (this  << size );
 
       m_globalUid++;
-      m_internalID = m_globalUid;
-      m_id = GenerateRandomString(8);
+      m_internalID = m_globalUid; 
+      m_id = UUID::Sequential().string().substr(0,24);
       m_id += "-";
       m_id += m_globalUid;
       m_timestamp = Simulator::Now();
@@ -83,6 +83,7 @@ namespace ns3 {
       ); // StringSource
       m_key = m_key.substr(0, m_size);
       NS_LOG_FUNCTION (this << m_id << m_size << m_key.length() << GetStateString() );
+      m_randomVariable = CreateObject<UniformRandomVariable>();
 
       SwitchToState(READY);
 
@@ -105,6 +106,7 @@ namespace ns3 {
 
       std::string randomString = GenerateRandomString(m_size);
       m_key = randomString.substr(0, m_size);
+      m_randomVariable = CreateObject<UniformRandomVariable>();
 
       //NS_LOG_FUNCTION (this << m_id << m_key.length() << randomString.length() << GetStateString() );
       NS_LOG_FUNCTION( this << m_internalID << m_key.length() << m_key );
@@ -120,17 +122,23 @@ namespace ns3 {
         m_key(key),
         m_state(INIT)
     {
-      NS_LOG_FUNCTION (this << m_id << m_key.length() );
+        NS_LOG_FUNCTION (this << m_id << m_key.length() );
 
-      m_globalUid++;
-      //m_internalID = m_globalUid;
-      m_internalID = keyIdnum;
-      m_timestamp = Simulator::Now();
-      m_size = m_key.length();
+        m_globalUid++;
+        //m_internalID = m_globalUid;
+        if(keyId.empty()){
+            m_id = UUID::Sequential().string().substr(0,24);
+            m_id += "-";
+            m_id += m_globalUid;
+        }
+        m_internalID = keyIdnum;
+        m_timestamp = Simulator::Now();
+        m_size = m_key.length();
 
-      //NS_LOG_FUNCTION (this << m_id << m_key.length() << randomString.length() << GetStateString() );
-      NS_LOG_FUNCTION( this << m_internalID << m_key.length() << m_key );
-      SwitchToState(READY);
+        //NS_LOG_FUNCTION (this << m_id << m_key.length() << randomString.length() << GetStateString() );
+        NS_LOG_FUNCTION( this << m_internalID << m_key.length() << m_key );
+        m_randomVariable = CreateObject<UniformRandomVariable>();
+        SwitchToState(READY);
     }
 
     QKDKey::QKDKey(
@@ -140,8 +148,16 @@ namespace ns3 {
         m_key(key),
         m_state(INIT)
     {
+        m_globalUid++;
+        //m_internalID = m_globalUid; 
+        if(keyId.empty()){
+            m_id = UUID::Sequential().string().substr(0,24);
+            m_id += "-";
+            m_id += m_globalUid;
+        }
         m_timestamp = Simulator::Now();
         m_size = m_key.length();
+        m_randomVariable = CreateObject<UniformRandomVariable>();
         SwitchToState(READY);
     }
 
@@ -280,8 +296,10 @@ namespace ns3 {
             "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
             "abcdefghijklmnopqrstuvwxyz";
         //srand( m_internalID );
-        for(int i = 0; i < len; ++i){
-            tmp_s += alphanum[rand() %(sizeof(alphanum) - 1)];
+        for(int i = 0; i < len; ++i)
+        {
+            uint32_t randomIndex = m_randomVariable->GetInteger(0, sizeof(alphanum) - 1); 
+            tmp_s += alphanum[randomIndex];
         }
         return tmp_s;
     }

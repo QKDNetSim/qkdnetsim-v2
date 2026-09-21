@@ -167,6 +167,7 @@ namespace ns3 {
         m_c = 0;
         m_lastKeyChargingTimeStamp = 0;
         m_previousStatus = 0; 
+        m_randomVariable = CreateObject<UniformRandomVariable>();
         CheckState();
     }
 
@@ -303,7 +304,14 @@ namespace ns3 {
             return false;
         }
 
-        m_keys.insert( std::make_pair(  key->GetId() ,  key) );
+        auto [it, inserted] =
+            m_keys.insert(std::make_pair(key->GetId(), key));
+
+        if (!inserted)
+        {
+            NS_LOG_ERROR("Duplicate key ID: " << key->GetId());
+            return false;
+        }
         NS_LOG_FUNCTION(this << "Key" << key->GetId() << "added to QBuffer");
 
         if(fireTraces){
@@ -396,7 +404,7 @@ namespace ns3 {
         }else{ 
             //Return random key from QBuffer
             NS_LOG_FUNCTION(this << "keyId:\t" << keyId <<  "\t *random" << GetKeyCount());
-            std::unordered_map< std::string, Ptr <QKDKey> >::iterator random_it;
+            std::map< std::string, Ptr <QKDKey> >::iterator random_it;
             uint32_t keyCount = GetKeyCount();
             if(keyCount  >= 1)
             {   //If QBuffer is not empty select a random key
@@ -404,7 +412,9 @@ namespace ns3 {
                 {
                     random_it = m_keys.begin();
                 } else {
-                    random_it = std::next(std::begin(m_keys), std::rand()%keyCount);
+                    uint32_t randomIndex = m_randomVariable->GetInteger(0, m_keys.size() - 1);
+                    NS_LOG_FUNCTION(this << "---randIndex: " << randomIndex);
+                    random_it = std::next(std::begin(m_keys), randomIndex);
                 }
                 key = random_it->second;
                 DestroyKey(key->GetId());

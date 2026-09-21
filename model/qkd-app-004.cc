@@ -908,7 +908,7 @@ QKDApp004::CheckStreamSessions()
 void
 QKDApp004::CheckQueues()
 {
-    NS_LOG_FUNCTION(this);
+    NS_LOG_FUNCTION(this << m_encStream->GetKeyCount() << m_encStream->GetSize());
     bool encQueueReady {false};
     bool authQueueReady {false};
 
@@ -917,14 +917,14 @@ QKDApp004::CheckQueues()
       NS_LOG_FUNCTION(this << " 917: " << m_encStream->IsVerified() << m_encStream->GetKeyCount() << m_encStream->GetSize());
       GetKeyFromKMS(m_encStream->GetId());
     }else
-        encQueueReady = true;
+      encQueueReady = true;
 
     if(m_authStream->IsVerified() && m_authStream->GetKeyCount() < m_authStream->GetSize())
     {
       NS_LOG_FUNCTION(this << " 924: " << m_authStream->IsVerified() << m_authStream->GetKeyCount() << m_authStream->GetSize());
       GetKeyFromKMS(m_authStream->GetId());
     }else
-        authQueueReady = true;
+      authQueueReady = true;
 
     if(authQueueReady && encQueueReady){
         if(!m_master)
@@ -1079,7 +1079,8 @@ QKDApp004::SendPacket()
     uint32_t encKeyId {0};
     uint32_t authKeyId {0}; //Necessary for headers
     std::string confidentialMsg {GetPacketContent()}, encryptedMsg {confidentialMsg}, authTag {GetPacketContent(32)};
-    if(GetEncryptionKeySize() ){ //Obtain encryption key!
+    if(GetEncryptionKeySize() )
+    { //Obtain encryption key!
       encKey = m_encStream->GetKey(m_packetSize);
       if(!encKey){
         NS_LOG_ERROR(this << "no encryption key available");
@@ -1090,12 +1091,15 @@ QKDApp004::SendPacket()
         if(encKey->GetLifetime() == 0)
           GetKeyFromKMS(m_encStream->GetId());
         encKeyId = encKey->GetIndex();
-        if(m_useCrypto) encryptedMsg = m_encryptor->EncryptMsg(confidentialMsg, encKey->GetKeyString());
+        if(m_useCrypto) 
+          encryptedMsg = m_encryptor->EncryptMsg(confidentialMsg, encKey->GetKeyString());
         NS_LOG_FUNCTION(this << "\nConfidential message:\t\t" << confidentialMsg.size() << confidentialMsg
                              << "\nEncryption key ID:\t\t" << encKey->GetIndex() << encKey->GetKeyString()
-                             << "\nEncrypted message:\t\t" << m_encryptor->Base64Encode(encryptedMsg));
+                             << "\nEncrypted message:\t\t" << m_encryptor->Base64Encode(encryptedMsg)
+        );
       }
     }
+
     if(GetAuthenticationKeySize() ){//Obtain authentication
       authKey = m_authStream->GetKey();
       if(!authKey){
@@ -1105,8 +1109,9 @@ QKDApp004::SendPacket()
       }else{
         GetKeyFromKMS(m_authStream->GetId());
         authKeyId = authKey->GetIndex();
-        if(m_useCrypto) authTag = m_encryptor->Authenticate(encryptedMsg, authKey->GetKeyString());
-        NS_LOG_FUNCTION(this << "\nAuthentication key ID:\t\t" << authKey->GetIndex() << authKey->GetKeyString()
+        if(m_useCrypto) 
+          authTag = m_encryptor->Authenticate(encryptedMsg, authKey->GetKeyString());
+        NS_LOG_FUNCTION(this << "\nEN Authentication key ID:\t\t" << authKey->GetIndex() << authKey->GetKeyString()
                              << "\nAuthentication tag:\t\t" << authTag);
       }
     }else if(m_authenticationType != QKDEncryptor::UNAUTHENTICATED){
@@ -1116,14 +1121,21 @@ QKDApp004::SendPacket()
     //Create packet with protected/unprotected data
     std::string msg = encryptedMsg;
     Ptr<Packet> packet = Create<Packet>((uint8_t*) msg.c_str(), msg.length() );
-    NS_ASSERT(packet );
-    m_authenticationTrace(packet, authTag);
+    NS_ASSERT(packet);
+
+    std::string encKeyIdStr = std::to_string(encKeyId);
+    std::string authKeyIdStr = std::to_string(authKeyId);
+    if(encKeyId && encKey)
+      m_encryptionTrace(GetId(), encKeyIdStr, encKey->GetSizeInBits(), msg, encryptedMsg, packet);
+    
+    if(authKeyId && authKey && !authTag.empty())
+      m_authenticationTrace(GetId(), authKeyIdStr, authKey->GetSizeInBits(), encryptedMsg, authTag, packet);
  
     QKDAppHeader qHeader;
     qHeader.SetEncrypted(m_encryptionType);
-    qHeader.SetEncryptionKeyId(std::to_string(encKeyId));
+    qHeader.SetEncryptionKeyId(encKeyIdStr);
     qHeader.SetAuthenticated(m_authenticationType);
-    qHeader.SetAuthenticationKeyId(std::to_string(authKeyId));
+    qHeader.SetAuthenticationKeyId(authKeyIdStr);
     qHeader.SetAuthTag(authTag);
     qHeader.SetLength(packet->GetSize() + qHeader.GetSerializedSize());
     packet->AddHeader(qHeader);
@@ -1143,6 +1155,9 @@ QKDApp004::SendPacket()
     ScheduleTx();
     NS_LOG_FUNCTION(this << "unable to send data" << GetAppStateString(GetState()));
 
+  }else if(GetState() == STOPPED){
+    NS_LOG_FUNCTION(this << "Application is stopped! Exiting!");
+    return;
   }else
     NS_FATAL_ERROR(this << "invalid state" << GetAppStateString(GetState()));
 
@@ -1164,47 +1179,113 @@ QKDApp004::ProcessDataPacket(QKDAppHeader header, Ptr<Packet> packet, Ptr<Socket
 
   SetCryptoSettings(header.GetEncrypted(), header.GetAuthenticated(), m_authenticationTagLengthInBits);
   std::string decryptedMsg;
-  bool authSuccessful {true};
-  if(GetAuthenticationKeySize() )
-  { 
-    //Authentication requires QKD key
-    if(!m_authStream->SyncStream(std::stoi(header.GetAuthenticationKeyId()))) //Key has been changed
-      GetKeyFromKMS(m_authStream->GetId());
+  const std::string authTag = header.GetAuthTag();
+  bool authSuccessful = false;
 
-    Ptr<AppKey> authKey {m_authStream->GetKey()}; //Obtain new authentication key(note that the stream is in sync before this)
-    if(!authKey){ //Packet received out of sync(dealyed packet). Packet is dropped!
-      NS_LOG_DEBUG(this << "key missing " << std::stoi(header.GetAuthenticationKeyId()) << " packet is DROPPED");
+  if (header.GetAuthenticated())
+  {
+      // QKD-key-based authentication (e.g. VMAC)
+      if (GetAuthenticationKeySize() > 0)
+      {
+          const uint32_t authKeyId =
+              static_cast<uint32_t>(std::stoul(header.GetAuthenticationKeyId()));
+
+          NS_LOG_FUNCTION(this
+                          << "header.GetAuthenticationKeyId()=" << header.GetAuthenticationKeyId()
+                          << "AuthKeyId=" << authKeyId
+                          << " authTag=" << authTag
+                          << " keyCount=" << m_authStream->GetKeyCount());
+
+          // Make sure the authentication stream is synchronized with the
+          // key identified by the received packet.
+          if (!m_authStream->SyncStream(authKeyId))
+          {
+              NS_LOG_FUNCTION(this
+                              << "Auth stream is not synchronized. "
+                              << "Fetching new key from KMS.");
+              CheckQueues();
+          }
+
+          // Obtain the authentication key corresponding to the synchronized stream.
+          Ptr<AppKey> authKey = m_authStream->GetKey();
+          if (!authKey)
+          {
+              // Packet arrived out of sync (e.g. delayed packet).
+              NS_LOG_DEBUG(this << "Authentication key missing: " << authKeyId
+                           << ". Packet is dropped.");
+              SetState(READY);
+              return;
+          }
+          CheckQueues();
+          NS_LOG_FUNCTION(this
+                          << "Authentication key ID=" << authKey->GetId()
+                          << " headerKeyId=" << authKeyId
+                          << " index=" << authKey->GetIndex()
+                          << " size=" << authKey->GetSizeInBits());
+   
+          if (m_useCrypto)
+          {
+              authSuccessful = m_encryptor->CheckAuthentication(payload,authTag,authKey->GetKeyString());
+              NS_LOG_FUNCTION(this << "DE Authentication key index=" << authKey->GetIndex() << " tag=" << authTag);
+          }else{
+              // Crypto disabled: authentication is assumed successful.
+              authSuccessful = true;
+          }
+          m_deauthenticationTrace(
+              GetId(),
+              std::to_string(authKey->GetIndex()),
+              authKey->GetSizeInBits(),
+              payload,
+              authTag,
+              packet);
+      }
+      // Classical authentication (e.g. MD5/SHA1)
+      else
+      {
+          // Classical authentication does not consume a QKD authentication key.
+          m_deauthenticationTrace(
+              GetId(),
+              "",
+              0,
+              payload,
+              authTag,
+              packet);
+
+          if (m_useCrypto)
+          {
+              authSuccessful = m_encryptor->CheckAuthentication(payload, authTag, "");
+          }else{
+              // Crypto disabled: authentication is assumed successful.
+              authSuccessful = true;
+          }
+      }
+  }
+
+  // -----------------------------------------------------------------------------
+  // Authentication result
+  // -----------------------------------------------------------------------------
+  if (authSuccessful)
+      NS_LOG_FUNCTION(this << "authentication successful");
+  else
+  {
+      NS_FATAL_ERROR(this << " *** authentication failed ***");
       SetState(READY);
       return;
-
-    }else
-      GetKeyFromKMS(m_authStream->GetId());
-
-    NS_LOG_FUNCTION(this << "authentication key" << authKey->GetIndex() << authKey->GetKeyString());
-    if(m_useCrypto) //Authentication
-      if(!m_encryptor->CheckAuthentication(payload, header.GetAuthTag(), authKey->GetKeyString())) //Check AuthTag
-        authSuccessful = false;
-
-  }else if(header.GetAuthenticated() && m_useCrypto){ //Authentication does not require quantum key
-    if(!m_encryptor->CheckAuthentication(payload, header.GetAuthTag(), ""))
-      authSuccessful = false;
-
-  }
-  if(authSuccessful)
-    NS_LOG_FUNCTION(this << "authentication successful");
-  else{
-    NS_LOG_DEBUG(this << "authentication failed -> packet is dropped");
-    return;
   }
 
   //Perform decryption
   if(header.GetEncrypted())
   {
-    if(!m_encStream->SyncStream(std::stoi(header.GetEncryptionKeyId()))) //Synchronization
-      GetKeyFromKMS(m_encStream->GetId()); //Calling get_key request
+    if(!m_encStream->SyncStream(std::stoi(header.GetEncryptionKeyId())))
+    {
+      NS_LOG_FUNCTION(this << "Encryption stream  not in SYNC! Fetch new key from KMS!"); 
+      CheckQueues();
+    }
 
     Ptr<AppKey> encKey {m_encStream->GetKey(m_packetSize)}; //Obtain new encryption key
-    if(!encKey){ //Out of sync(delayed packet)! Packet is dropped!
+    if(!encKey)
+    {  
+      //Out of sync(delayed packet)! Packet is dropped!
       NS_LOG_DEBUG(this << "key missing " << std::stoi(header.GetEncryptionKeyId()) << " packet is DROPPED");
       GetKeyFromKMS(m_encStream->GetId());
       SetState(READY);
@@ -1212,21 +1293,28 @@ QKDApp004::ProcessDataPacket(QKDAppHeader header, Ptr<Packet> packet, Ptr<Socket
 
     }else if(encKey->GetLifetime() == 0)
       GetKeyFromKMS(m_encStream->GetId());
+    else
+      CheckQueues();
 
     NS_LOG_FUNCTION(this << "decryption key" << encKey->GetIndex() << encKey->GetKeyString());
-    if(m_useCrypto && authSuccessful){//Packet is decrypted only when it is succesfully  authenticated
+    std::string encKeyIdStr = std::to_string(encKey->GetIndex());
+    if(m_useCrypto && authSuccessful)
+    {
+      //Packet is decrypted only when it is succesfully  authenticated
       decryptedMsg = m_encryptor->DecryptMsg(payload, encKey->GetKeyString());
+      m_decryptionTrace(GetId(), encKeyIdStr, encKey->GetSizeInBits(), decryptedMsg, payload, packet);
       NS_LOG_FUNCTION(this << "decrypted message\n" << decryptedMsg);
 
-    }else if(authSuccessful)//Fake decryption process
+    }else if(authSuccessful)
+    {
+      //Fake decryption process
       NS_LOG_FUNCTION(this << "decrypted message" << payload);
+      m_decryptionTrace(GetId(), encKeyIdStr, encKey->GetSizeInBits(), decryptedMsg, payload, packet);
 
-    else //Receiving unprotected packet
+    }else //Receiving unprotected packet
        NS_LOG_FUNCTION(this << "received message" << payload);
-
-    SetState(READY);
-
   }
+  SetState(READY);
 }
 
 void
@@ -1235,7 +1323,7 @@ QKDApp004::ProcessResponseFromKMS(HTTPMessage& header, Ptr<Packet> packet, Ptr<S
   NS_LOG_FUNCTION(this << packet->GetUid() << packet->GetSize());
   std::string methodName {ReadUri(header.GetRequestUri())[5]};
 
-  NS_LOG_FUNCTION(this << "We resived resposne to " << methodName);
+  NS_LOG_FUNCTION(this << "We received resposne to " << methodName);
 
   if(methodName == "open_connect" && GetState() != STOPPED)
     ProcessOpenConnectResponse(header);
@@ -1369,13 +1457,7 @@ QKDApp004::GetKeyFromKMS(std::string ksid)
 void
 QKDApp004::Close(std::string ksid)
 {
-  NS_LOG_FUNCTION(this << m_master << ksid);
-  if(m_encStream->GetId() == ksid)
-    m_encStream->ClearStream();
-  else if(m_authStream->GetId() == ksid)
-    m_authStream->ClearStream();
-  else
-    NS_LOG_ERROR(this << "unknown ksid" << ksid);
+  NS_LOG_FUNCTION(this << m_master << ksid << m_encStream->GetId() << m_authStream->GetId() );
 
   std::string reqUri {"http://" + IpToString(GetKmsIp()) + "/api/v1/keys/" + ksid + "/close"};
   //Create packet
@@ -1434,7 +1516,6 @@ QKDApp004::ProcessOpenConnectResponse(HTTPMessage& header)
     }catch(...){
       NS_FATAL_ERROR(this << "json parse error");
     }
-
   }
 
   uint32_t keySize = 0;
@@ -1578,16 +1659,18 @@ QKDApp004::ProcessCloseResponse(HTTPMessage& header)
   NS_LOG_FUNCTION(this << header.GetStatus());
   KeyStreamSession::Type sessionType {PopHttpKmsRequest(header.GetRequestUri())};
   if(m_httpRequestsKMS.empty()){ //Sockets are closed when both CLOSE responses are received!
-    if(m_socketToKMS)   m_socketToKMS->Close();
+    if(m_socketToKMS)
+      m_socketToKMS->Close();
   }
 
-  if(header.GetStatus() != HTTPMessage::Ok)   NS_LOG_DEBUG(this);
+  if(header.GetStatus() != HTTPMessage::Ok)   
+    NS_LOG_DEBUG(this);
+
   std::string ksid {};
   if(sessionType == KeyStreamSession::ENCRYPTION)
     m_encStream->ClearStream();
   else
     m_authStream->ClearStream();
-
 }
 
 void
@@ -1597,14 +1680,17 @@ QKDApp004::ProcessSignalingPacketFromApp(HTTPMessage& header, Ptr<Socket> socket
 
   if(m_master){ //Sender App004 processes responses from peer Receiver App004
     std::string method { ReadUri( header.GetRequestUri() )[5] };
-    if(method == "send_ksid"){ //Sender App004 processes send_ksid response
-      if(ReadUri( header.GetRequestUri() )[6] != "?ksid=" || ReadUri( header.GetRequestUri() )[8] != "&scope=")   NS_LOG_DEBUG(this);
+    if(method == "send_ksid")
+    { //Sender App004 processes send_ksid response
+      if(ReadUri( header.GetRequestUri() )[6] != "?ksid=" || ReadUri( header.GetRequestUri() )[8] != "&scope=")   
+        NS_LOG_DEBUG(this);
 
       std::string ksid { ReadUri( header.GetRequestUri() )[7] };
       std::string scope { ReadUri( header.GetRequestUri() )[9] };
       NS_LOG_FUNCTION(this << "emir" << ksid << scope);
       NS_ASSERT(!ksid.empty() || !scope.empty());
-      if(header.GetStatus() == HTTPMessage::Ok){ //status code 200
+      if(header.GetStatus() == HTTPMessage::Ok)
+      { //status code 200
         if(scope == "enc"){
           if(m_encStream->GetId() != ksid)   NS_LOG_DEBUG(this << "ksid not matching scope");
           m_encStream->SetVerified(true);
@@ -2050,7 +2136,7 @@ QKDApp004::GetAuthenticationKeySize()
             return 0;
             break;
         case QKDEncryptor::QKDCRYPTO_AUTH_VMAC:
-            return CryptoPP::AES::DEFAULT_KEYLENGTH * 8; //Use with AES. In bits 128 bits!
+            return m_authenticationTagLengthInBits; //Use with AES. In bits 128 bits!
             break;
         case QKDEncryptor::QKDCRYPTO_AUTH_MD5:
             return 0; //NoKey

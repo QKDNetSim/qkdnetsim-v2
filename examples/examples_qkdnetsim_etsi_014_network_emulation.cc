@@ -55,16 +55,10 @@
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE ("QKD_ETSI014");
-   
-std::map<uint32_t, std::map<uint32_t, std::map<uint32_t, uint32_t>> > m_relayTrace;
-std::map<uint32_t, uint32_t> m_wasteTrace;
-
-uint32_t showKeyAdded = 0;
-uint32_t showKeyServed = 0;
-
+NS_LOG_COMPONENT_DEFINE ("QKDNETSIM_EXAMPLE_ETSI_014_NETWORK_EMULATION");
+ 
 std::map<std::string, std::map<std::string, uint32_t> > m_generatedKeys;
-std::map<std::string, std::map<std::string, uint32_t> > m_servedKeys;
+std::map<std::string, std::map<std::string, uint32_t> > m_deliveredKeys;
 
 std::map<std::string, std::pair<uint32_t, uint32_t> > m_dataAppSent;
 std::map<std::string, std::pair<uint32_t, uint32_t> > m_dataAppReveived;
@@ -76,11 +70,10 @@ std::map<std::string, uint32_t> m_missedSendPacketCalls;
 
 void
 KeyGenerated(std::string context, const std::string& appId, const std::string& keyId, const uint32_t& amountInBits)
-{ 
+{
     auto it = m_generatedKeys.find(appId);
     if(it == m_generatedKeys.end())
     {
-        
         std::map<std::string, uint32_t> map0 {{keyId, amountInBits}};
         m_generatedKeys.insert(std::make_pair(appId, map0)); 
 
@@ -96,12 +89,12 @@ KeyGenerated(std::string context, const std::string& appId, const std::string& k
 }
 
 void
-KeyServed (std::string context, const std::string& appId, const std::string& keyId, const uint32_t& amountInBits)
+KeyDelivered (std::string context, const std::string& appId, const std::string& keyId, const uint32_t& amountInBits)
 { 
-    auto it = m_servedKeys.find(appId);
-    if(it == m_servedKeys.end()){
+    auto it = m_deliveredKeys.find(appId);
+    if(it == m_deliveredKeys.end()){
         std::map<std::string, uint32_t> map0 {{keyId, amountInBits}};
-        m_servedKeys.insert(std::make_pair(appId, map0)); 
+        m_deliveredKeys.insert(std::make_pair(appId, map0)); 
     }else{
         auto it2 = it->second.find(keyId);
         if(it2 != it->second.end()){
@@ -110,44 +103,6 @@ KeyServed (std::string context, const std::string& appId, const std::string& key
             it->second.insert(std::make_pair(keyId, amountInBits)); 
         }
     }       
-}
-
-void
-RelayKeyTrace(
-    std::string context, 
-    const uint32_t& nodeId, 
-    const uint32_t& srcNodeId,
-    const uint32_t& dstNodeId,
-    const uint32_t& amount
-){
-    std::map<uint32_t, uint32_t> map0 {{dstNodeId, amount}};
-    std::map<uint32_t, std::map<uint32_t, uint32_t> > map1 {{srcNodeId, map0}};
-
-    auto it = m_relayTrace.find(nodeId);
-    if(it == m_relayTrace.end())
-        m_relayTrace.insert( std::make_pair(nodeId, map1) );
-    else{
-        auto it1 = it->second.find(srcNodeId);
-        if(it1 == it->second.end())
-            it->second.insert(std::make_pair(srcNodeId, map0) );
-        else{
-            auto it2 = it1->second.find(dstNodeId);
-            if(it2 == it1->second.end())
-                it1->second.insert(std::make_pair(dstNodeId, amount));
-            else
-                it2->second += amount;
-        }
-    }
-
-}
-
-void
-WasteKeyTrace (std::string, const uint32_t& srcNodeId, const uint32_t& dstNodeId, const uint32_t& amountInBits){
-    auto it = m_wasteTrace.find(srcNodeId);
-    if(it == m_wasteTrace.end())
-        m_wasteTrace.insert( std::make_pair(srcNodeId, amountInBits) );
-    else
-        it->second += amountInBits;
 }
 
 void
@@ -245,40 +200,19 @@ Ratio(){
     std::cout << "\n\n\tMissed Send Packet Calls:";
     for(const auto &el: m_missedSendPacketCalls)
         std::cout << "\n\t\tApplication ID:\t" << el.first << "\tNumber:\t" << el.second;
-
-    std::cout << "\n\nKEY RELAY STATS:\n";
-    for (const auto &el: m_relayTrace){
-        uint32_t totalKeysRelayed {0};
-        std::cout << "\n\tNode ID:\t" << el.first;
-        for (const auto &el1: el.second){
-            for(const auto &el2: el1.second){
-                std::cout << "\n\t\tFrom:" << el1.first << "\tTo:" << el2.first << "\tAmount (bits):" << el2.second;
-                totalKeysRelayed += el2.second;
-            }
-        }
-        std::cout << "\n\t\tTotal amount (bits):\t" << totalKeysRelayed;
-    }
-    if(m_relayTrace.empty())
-        std::cout << "\n\tNONE";
-
-    std::cout << "\n\nWasted key material (source and intermidiate nodes)";
-    for (const auto &el: m_wasteTrace)
-        std::cout << "\n\tNode ID:\t" << el.first
-        << "\n\t\tWasted amount:\t" << el.second;
-    if(m_wasteTrace.empty())
-        std::cout << "\n\tNONE";
-
+  
     std::cout << "\n\nQKD LINK STATS:\n";
     for (const auto &el: m_generatedKeys){
         for(const auto &el1 : el.second)
-            std::cout << "\n\tLink (" << el.first << "-"<< el1.first << ")\tGenerated (bits):" << el1.second;
+            std::cout << "\n\t QKDSystem link: " << el.first << "\t keyId: "<< el1.first << "\t Size: " << el1.second / 2 << " (bits)";
     }
 
     std::cout << "\n\nSERVICE STATS:\n";
-    for(auto const &el: m_servedKeys){
-        std::cout << "\n\tNode ID:\t" << el.first;
+    for(auto const &el: m_deliveredKeys){
+        std::cout << "\n\tApplication ID (SAEId):\t" << el.first;
         for(auto const &el1: el.second)   
-            std::cout << "\n\t\tApplication ID:\t" << el1.first << "\t\tServed (bits):\t" << el1.second;
+            std::cout << "\n\t\tDelivered Key ID:\t" << el1.first << "\t Size: " << el1.second << " (bits)";
+        std::cout << "\n";
     }
 
 }
@@ -342,10 +276,7 @@ int main (int argc, char *argv[])
     cmd.AddValue ("appRate", "The traffic rate of application that consumes keys", appRate); 
     
     cmd.AddValue ("keyRate", "QKD Key rate", ppKeyRate); 
-    cmd.AddValue ("keySize", "The size of generated keys", ppKeySize); 
-
-    cmd.AddValue ("showKeyServed", "Show trace when a key is served from KMS", showKeyServed); 
-    cmd.AddValue ("showKeyAdded", "Show trace when a key is generated", showKeyAdded);  
+    cmd.AddValue ("keySize", "The size of generated keys", ppKeySize);  
 
     cmd.AddValue ("ppPacketSize", "QKD Post-processing packet size", ppPacketSize);
     cmd.AddValue ("ppRate", "QKD Post-processing traffic rate", ppRate);
@@ -962,10 +893,8 @@ int main (int argc, char *argv[])
     ////////////////////////////////////// 
 
     //Connect Traces for KM key statistics
-    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/KeyServed", MakeCallback(&KeyServed));
-    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/QKDKeyGenerated", MakeCallback(&KeyGenerated));
-    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/RelayConsumption", MakeCallback(&RelayKeyTrace));
-    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/WasteRelay", MakeCallback(&WasteKeyTrace)); 
+    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/KeyDelivered", MakeCallback(&KeyDelivered));
+    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::QKDKeyManagerSystemApplication/KeyGenerated", MakeCallback(&KeyGenerated));
 
     if(trace){
         //if we need we can create pcap files

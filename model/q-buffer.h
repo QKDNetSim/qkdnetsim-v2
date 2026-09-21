@@ -21,6 +21,7 @@
 #include "ns3/event-id.h"
 #include "qkd-key.h"
 #include "ns3/node.h"
+#include "ns3/random-variable-stream.h"
 #include <map>
 #include <vector>
 #include <unordered_map>
@@ -387,7 +388,7 @@ namespace ns3 {
 
       static uint32_t   nBuffers; //!< number of created buffers - static value
 
-      std::unordered_map< std::string, Ptr <QKDKey> > m_keys; //!< key database
+      std::map< std::string, Ptr <QKDKey> > m_keys; //!< key database
 
       uint32_t m_srcKMSApplicationIndex;
 
@@ -507,6 +508,8 @@ namespace ns3 {
       TracedCallback < double > m_averageKeyChargingTimePeriodTrace;
 
       uint32_t m_srcNodeBufferListIndex;
+
+      Ptr<UniformRandomVariable> m_randomVariable;
 
   };
 }

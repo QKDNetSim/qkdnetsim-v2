@@ -471,8 +471,9 @@ private:
     /**
      * @brief Adds HTTP request to kms queue to properly map response later
      * @param input key type
+     * @param input uri
      */
-    void PushHttpKmsRequest(std::string input);
+    void PushHttpKmsRequest(std::string input, std::string uri);
 
     /**
      * @brief Adds HTTP request to app queue to properly map response later
@@ -482,11 +483,12 @@ private:
 
     /**
      * @brief Pop HTTP request from kms queue
+     * @param input uri
      * @return string key type
      *
      * It deletes request from queue!
      */
-    std::string PopHttpKmsRequest();
+    std::string PopHttpKmsRequest(std::string uri);
 
     /**
      * @brief Pop HTTP request from app queue
@@ -603,7 +605,7 @@ private:
     uint16_t        m_portSignaling;
 
     //HTTP mappings
-    std::vector<std::string>                        m_kmsHttpReqQueue;
+    std::map<std::string, std::string>              m_kmsHttpReqQueue;
     std::vector<std::vector<std::string> >          m_appHttpReqQueue;
 
     //App params
@@ -636,10 +638,10 @@ private:
     Ptr<QKDEncryptor> m_encryptor;                              //!< encryptor
 
     //Traces
-    TracedCallback<Ptr<Packet> > m_encryptionTrace; //!< trace callback for encryption
-    TracedCallback<Ptr<Packet> > m_decryptionTrace; //!< trace callback for decryption
-    TracedCallback<Ptr<Packet>, std::string > m_authenticationTrace;    //!< trace callback for authentication
-    TracedCallback<Ptr<Packet>, std::string > m_deauthenticationTrace;  //!< trace callback for authentication check
+    TracedCallback<const std::string&, const std::string&, const uint32_t&, const std::string&, const std::string&, Ptr<Packet> > m_encryptionTrace; //!< trace callback for encryption
+    TracedCallback<const std::string&, const std::string&, const uint32_t&, const std::string&, const std::string&, Ptr<Packet> > m_decryptionTrace; //!< trace callback for decryption 
+    TracedCallback<const std::string&, const std::string&, const uint32_t&,  const std::string&, const std::string&, Ptr<Packet> > m_authenticationTrace; //!< trace callback for authentication
+    TracedCallback<const std::string&, const std::string&, const uint32_t&,  const std::string&, const std::string&, Ptr<Packet> > m_deauthenticationTrace; //!< trace callback for authentication check
 
     /// Traced Callback: transmitted data packets.
     TracedCallback<const std::string&, Ptr<const Packet> > m_txTrace;

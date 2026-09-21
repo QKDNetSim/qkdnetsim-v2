@@ -746,14 +746,14 @@ private:
   TracedCallback<Ptr<const Packet> > m_txTrace;
   TracedCallback<Ptr<const Packet>, const Ipv4Address &, const uint32_t&> m_rxTraceKMSs;
   TracedCallback<Ptr<const Packet>, const uint32_t& > m_txTraceKMSs;
-  TracedCallback<const std::string&, const std::string&, const std::string&, const uint32_t&> m_ksidGenerated;
+  TracedCallback<const std::string&, const std::string&, const std::string&, const uint32_t&> m_ksidGeneratedTrace;
 
-  TracedCallback<const std::string&, const std::string&, const uint32_t&> m_qkdKeyGeneratedTrace;   //Generated key material!
-  TracedCallback<const std::string&, const std::string&, const uint32_t&> m_keyServedTrace; //Total amount of key material served by KMS
-  TracedCallback<const std::string&, const std::string&, const std::string&, const uint32_t&, const uint32_t&, const std::string&, const uint32_t&, const std::string&> m_keyServedTraceMixed; //Total amount of key material served by KMS
-  TracedCallback<const uint32_t&, const uint32_t&, const uint32_t&> m_keyConsumedLink; //Total amount of key material consumed for direct p2p usage!
-  TracedCallback<const uint32_t&, const uint32_t&, const uint32_t&, const uint32_t&> m_keyConsumedRelay;       //Amount of relayed key material
-  TracedCallback<const uint32_t&, const uint32_t&, const uint32_t&> m_keyWasteRelay;          //Amount of wasted key material(traced on source node, and failed relay node only)
+  TracedCallback<const std::string&, const std::string&, const uint32_t&> m_keyGeneratedTrace;   //Generated key material! 
+  TracedCallback<const uint32_t&, const uint32_t&, const std::string&, const uint32_t&> m_keyPQCGeneratedTrace;   //Generated key material! 
+  TracedCallback<const std::string&, const std::string&, const std::string&, const uint32_t&, const uint32_t&, const std::string&, const uint32_t&, const std::string&> m_keyPreparedTrace; //Total amount of key material served by KMS
+  TracedCallback<const std::string&, const std::string&, const std::string&, const uint32_t&, const uint32_t&, const std::string&, const uint32_t&, const std::string&> m_keyDeliveredTrace; //Total amount of key material served by KMS
+  TracedCallback<const uint32_t&, const uint32_t&,  const std::string&, const uint32_t&> m_keyRelayedTrace;       //Amount of relayed key material
+  TracedCallback<const uint32_t&, const uint32_t&, const std::string&, const uint32_t&> m_keyWastedOnRelayTrace;          //Amount of wasted key material(traced on source node, and failed relay node only)
 
   uint32_t m_maxKeyPerRequest; //Maximal number of keys per request QKDApp can ask for
   uint32_t m_minKeySize; //Minimal size of key QKDApp can request from KMS
@@ -938,14 +938,7 @@ private:
    * @return string UUID
    */
   std::string GenerateUUID();
-
-  /**
-   * @brief Generate random string with given length
-   * @param len string length
-   * @return string random string
-   */
-  std::string GenerateRandomString(const int len, const uint32_t seed = 0);
-
+ 
   /**
    * @brief Start s-buffers control -- monitoring
    * @param dstKmNodeId remote KM node ID

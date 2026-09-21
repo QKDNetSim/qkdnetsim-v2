@@ -88,14 +88,14 @@ namespace ns3 {
         return m_size;
     }
 
-    bool KeyStreamSession::SyncStream(uint32_t index) {
+    bool KeyStreamSession::SyncStream(uint32_t index) 
+    {
         auto it = m_stream.find(index);
         bool inSync {m_stream.begin() == it};
         if(it != m_stream.end()){
             while(m_stream.begin() != it)
                 m_stream.erase(m_stream.begin());
-        }
-
+        } 
         return inSync;
     }
 

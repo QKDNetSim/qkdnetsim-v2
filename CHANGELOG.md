@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.1.4] - 2026-09-21
+### Change
+- Examples: tracking statistics improved
+- ETSI004 application Close connection bug fixed; CheckQueues and get_key logic improved.
+- ETSI004 introducing trace for keys consumed for encryption/decryption and authentication/deauthantication
+- ETSI014 introducing trace for keys consumed for encryption/decryption and authentication/deauthantication
+- KMS application traces changed. Introducing trace for keys provided (from QBuffers to SBuffers) and delivered (from SBuffers to end-user applications) 
+- KMS application release ETSI004 Association bug fixed. Key are traced as wasted. No keys are restored back to QBuffers
+
 ## [3.1.3] - 2026-08-27
 ### Change
 - PQC support included

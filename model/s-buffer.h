@@ -21,6 +21,7 @@
 #include "ns3/event-id.h"
 #include "qkd-key.h"
 #include "ns3/node.h"
+#include "ns3/random-variable-stream.h"
 #include <vector>
 #include <map>
 #include <unordered_map>
@@ -203,6 +204,14 @@ namespace ns3 {
       Ptr<QKDKey> GetKey(uint32_t size);
 
       /**
+       * @brief Get key size given keyId
+       * @param keyId key identifier
+       * @return uint32_t
+       * 
+       */
+      uint32_t GetKeySizeById(std::string keyId);
+
+      /**
        * @brief Store supply key
        * @param key key
        */
@@ -310,6 +319,8 @@ namespace ns3 {
       uint32_t m_defaultKeySizeSBufferDefault;    //<! Default key size for this QKD Buffer (SBuffer default)
 
       uint32_t m_log; //<! Debuging log value;
+      
+      Ptr<UniformRandomVariable> m_randomVariable;
   };
 }
 
