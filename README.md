@@ -162,7 +162,92 @@ cmake --build liboqs-cpp/build --target install
 cmake --build liboqs-cpp/build --target examples --parallel 8
 ```
 
-### 3. Configure NS-3
+### 3. Troubleshooting
+
+#### `LIBOQS_CPP_VERSION` was not declared
+
+If you encounter the following compilation error:
+
+```text
+error: ‘LIBOQS_CPP_VERSION’ was not declared in this scope
+```
+
+add the following definition to `ns-3-dev/CMakeLists.txt`:
+
+```cmake
+add_compile_definitions(LIBOQS_CPP_VERSION="0.12.0")
+```
+
+> **Note:** Replace `0.12.0` with the version of `liboqs-cpp` installed on your system, if required by your configuration.
+
+#### `undefined reference to OQS_*`
+
+If you encounter linker errors such as:
+
+```text
+undefined reference to `OQS_KEM_keypair'
+undefined reference to `OQS_KEM_alg_count'
+undefined reference to `OQS_KEM_new'
+undefined reference to `OQS_init'
+```
+
+make sure that the `liboqs` and `liboqs-cpp` libraries are correctly detected and linked by QKDNetSim.
+
+Add the following section to:
+
+```text
+contrib/qkdnetsim/CMakeLists.txt
+```
+
+```cmake
+# ---- liboqs ----
+find_external_library(
+  DEPENDENCY_NAME OQS
+  HEADER_NAME oqs/oqs.h
+  LIBRARY_NAME oqs
+  SEARCH_PATHS /usr/local/include /usr/include
+)
+
+if(NOT OQS_FOUND)
+  message(FATAL_ERROR "liboqs not found. Install it in /usr/local or /usr.")
+endif()
+
+include_directories(${OQS_INCLUDE_DIRS})
+set(oqs_link_targets ${OQS_LIBRARIES})
+
+# ---- liboqs-cpp (optional) ----
+find_package(liboqs-cpp CONFIG QUIET)
+
+if(TARGET liboqs-cpp)
+    list(INSERT oqs_link_targets 0 liboqs-cpp)
+else()
+    add_compile_definitions(LIBOQS_CPP_VERSION="0.12.0")
+endif()
+
+# ---- QKDNetSim internal includes ----
+include_directories(
+  ${CMAKE_CURRENT_SOURCE_DIR}/model
+  ${CMAKE_CURRENT_SOURCE_DIR}/helper
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils
+)
+```
+
+Then, in the `LIBRARIES_TO_LINK` section of the same file, add:
+
+```cmake
+LIBRARIES_TO_LINK
+  ${libcore}
+  ${libnetwork}
+  ${libinternet}
+  ${libapplications}
+  ${libstats}
+  ${CRYPTOPP_LIBRARIES}
+  ${uuid_LIBRARIES}
+  ${oqs_link_targets}
+)
+```
+
+### 4. Configure NS-3
 
 After enabling PQC support, configure NS-3 again:
 
@@ -170,7 +255,7 @@ After enabling PQC support, configure NS-3 again:
 ./ns3 configure --enable-mpi --enable-examples -- -DQKDNETSIM_WITH_PQC=ON
 ```
 
-### 4. Run the QKD + PQC example
+### 5. Run the QKD + PQC example
 
 Run the QKD + PQC example:
 
